@@ -88,7 +88,7 @@ public class HarvestAdapter implements BridgeAdapter {
     public String getVersion() {
         // Bridgehub uses this version instead of the Maven version when 
         // displaying it in the console
-        return "1.0.0";
+        return "2.0.0";
     }
     
     @Override
