@@ -88,7 +88,7 @@ public class HarvestAdapter implements BridgeAdapter {
     public String getVersion() {
         // Bridgehub uses this version instead of the Maven version when 
         // displaying it in the console
-        return "1.0.0";
+        return "2.0.0";
     }
     
     @Override
@@ -123,7 +123,13 @@ public class HarvestAdapter implements BridgeAdapter {
      *-------------------------------------------------------------------------------------------*/
 
     @Override
-    public Count count(BridgeRequest request) throws BridgeError {
+    public Count count(BridgeRequest request) throws BridgeError {        
+        // Check if the inputted structure is valid
+        if (!VALID_STRUCTURES.contains(request.getStructure())) {
+            throw new BridgeError("Invalid Structure: '"
+                + request.getStructure() + "' is not a valid structure");
+        }
+        
         request.setQuery(substituteQueryParameters(request));
         Map<String, String> parameters = parser.getParameters(request.getQuery());
         Map<String, NameValuePair> parameterMap = buildNameValuePairMap(parameters);
@@ -132,12 +138,6 @@ public class HarvestAdapter implements BridgeAdapter {
         logger.trace("Counting records");
         logger.trace("  Structure: " + request.getStructure());
         logger.trace("  Query: " + request.getQuery());
-        
-        // Check if the inputted structure is valid
-        if (!VALID_STRUCTURES.contains(request.getStructure())) {
-            throw new BridgeError("Invalid Structure: '"
-                + request.getStructure() + "' is not a valid structure");
-        }
        
         // Retrieve the objects based on the structure from the source
         String output = getResource(getUrl(request, parameterMap));
@@ -148,7 +148,20 @@ public class HarvestAdapter implements BridgeAdapter {
         
         // Get the number of elements in the returned array
         Long tempCount = (Long)object.get("total_entries");
-        Integer count = (int)tempCount.intValue();
+        Integer count = 0;
+        // Single results will not have a total_entries property
+        if (tempCount == null) {
+            Long singleResult = (Long)object.get("id");
+            if (singleResult == null) {
+                throw new BridgeError("The Count result was unexpected.  Please"
+                        + "check query and rerun.");
+            } else {
+                // If object has id property assume a single result for found
+                count = 1;
+            }
+        } else {
+            count = (int)tempCount.intValue();
+        }
         
         // Create and return a count object that contains the count
         return new Count(count);
@@ -156,6 +169,12 @@ public class HarvestAdapter implements BridgeAdapter {
 
     @Override
     public Record retrieve(BridgeRequest request) throws BridgeError {
+        // Check if the inputted structure is valid
+        if (!VALID_STRUCTURES.contains(request.getStructure())) {
+            throw new BridgeError("Invalid Structure: '"
+                + request.getStructure() + "' is not a valid structure");
+        }
+        
         request.setQuery(substituteQueryParameters(request));
         Map<String, String> parameters = parser.getParameters(request.getQuery());
         Map<String, NameValuePair> parameterMap = buildNameValuePairMap(parameters);
@@ -165,12 +184,6 @@ public class HarvestAdapter implements BridgeAdapter {
         logger.trace("  Structure: " + request.getStructure());
         logger.trace("  Query: " + request.getQuery());
         logger.trace("  Fields: " + request.getFieldString());
-        
-        // Check if the inputted structure is valid
-        if (!VALID_STRUCTURES.contains(request.getStructure())) {
-            throw new BridgeError("Invalid Structure: '"
-                + request.getStructure() + "' is not a valid structure");
-        }
 
         // Retrieve the objects based on the structure from the source
         String output = getResource(getUrl(request, parameterMap));
@@ -178,6 +191,16 @@ public class HarvestAdapter implements BridgeAdapter {
         
         // Parse the response string into a JSONObject
         JSONObject obj = (JSONObject)JSONValue.parse(output);
+        
+        // Check if results are singular or mutiple
+        // TODO: support results with a list that has one element
+        JSONArray objects = (JSONArray)obj.get(
+            request.getStructure().replaceAll(" ", "_").toLowerCase()
+        );
+        if (objects != null) {
+            throw new BridgeError("Multiple results found for retrieve.  This is"
+                    + "invalid.");
+        }
         
         List<String> fields = request.getFields();
         if (fields == null) { 
@@ -218,6 +241,12 @@ public class HarvestAdapter implements BridgeAdapter {
 
     @Override
     public RecordList search(BridgeRequest request) throws BridgeError {
+        // Check if the inputted structure is valid
+        if (!VALID_STRUCTURES.contains(request.getStructure())) {
+            throw new BridgeError("Invalid Structure: '"
+                + request.getStructure() + "' is not a valid structure.");
+        }
+        
         request.setQuery(substituteQueryParameters(request));
         Map<String, String> parameters = addPaginationFromMetadata(
             parser.getParameters(request.getQuery()), request.getMetadata());
@@ -233,22 +262,12 @@ public class HarvestAdapter implements BridgeAdapter {
             logger.trace("  Fields: " + request.getFieldString());
         }
         
-//        if (request.getMetadata("order") != null) {    
-//            throw new BridgeError("Sort order is not supported by"
-//                + " the harvest adpater.");
-//        }
-        
-        // Check if the inputted structure is valid
-        if (!VALID_STRUCTURES.contains(request.getStructure())) {
-            throw new BridgeError("Invalid Structure: '"
-                + request.getStructure() + "' is not a valid structure.");
-        }
-        
         // Retrieve the objects based on the structure from the source
         String output;
         if (request.getMetadata() != null) {
             output = getResource(getUrl(request, parameterMap));
         } else {
+            // TODO: support order and pagination.
             output = getResource(getUrl(request, parameterMap));
         }
         
@@ -375,7 +394,6 @@ public class HarvestAdapter implements BridgeAdapter {
         String accountId = this.accountId;
         get.setHeader("Authorization", "Bearer " + accessToken);
         get.setHeader("Harvest-Account-ID", accountId);
-        get.setHeader("User-Agent", "Kinetic Data, Inc");
         get.setHeader("Content-Type", "application/json");
         get.setHeader("Accept", "application/json");
         

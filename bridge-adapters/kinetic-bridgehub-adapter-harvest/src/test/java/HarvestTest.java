@@ -16,6 +16,7 @@ import java.util.Set;
 import org.apache.http.NameValuePair;
 import org.apache.http.message.BasicNameValuePair;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import org.junit.Test;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -30,6 +31,32 @@ public class HarvestTest extends BridgeAdapterTestBase{
     @Override
     public String getConfigFilePath() {
         return "src/test/resources/bridge-config.yml";
+    }
+    
+    @Test
+    @Override
+    public void test_emptyRetrieve() throws Exception {
+        BridgeError error = null;
+        
+        BridgeRequest request = new BridgeRequest();
+
+        List<String> fields = Arrays.asList("id");
+        request.setFields(fields);
+        
+        request.setStructure("Projects");
+        request.setFields(fields);
+        request.setQuery("projects?client_id=2372100");
+        
+        Record record;
+        Map<String,Object> recordMap = new HashMap<String,Object>();
+        try {
+            record = getAdapter().retrieve(request);
+            recordMap = record.getRecord();
+        } catch (BridgeError e) {
+            error = e;
+        }
+        
+        assertNotNull(error);
     }
     
     @Test
@@ -117,7 +144,7 @@ public class HarvestTest extends BridgeAdapterTestBase{
         assertTrue(list.getRecords().size() > 0);
     }
     
-        @Test
+    @Test
     public void test_search_empty_fields() throws Exception{
         BridgeError error = null;
         

@@ -5,7 +5,35 @@
     <artifactId>kinetic-bridgehub-adapter-harvest</artifactId>
     <version>2.0.0</version>
     <packaging>jar</packaging>
+    
+    <distributionManagement>
+        <repository>
+            <id>com.kineticdata.public</id>
+            <url>s3://maven-repo-public-kineticdata.com/releases</url>
+        </repository>
+        <snapshotRepository>
+            <id>com.kineticdata.public</id>
+            <url>s3://maven-repo-public-kineticdata.com/snapshots</url>
+        </snapshotRepository>
+    </distributionManagement>
+    
+    <repositories>
+        <repository>
+            <id>z1_com.kineticdata.public</id>
+            <url>https://s3.amazonaws.com/maven-repo-public-kineticdata.com/releases</url>
+        </repository>
+        <repository>
+            <id>z2_com.kineticdata.public</id>
+            <url>https://s3.amazonaws.com/maven-repo-public-kineticdata.com/snapshots</url>
+        </repository>
+    </repositories>
+    
     <dependencies>
+        <dependency>
+            <groupId>com.kineticdata.bridges.adapter</groupId>
+            <artifactId>kinetic-bridgehub-adapter</artifactId>
+            <version>1.0.3</version>
+        </dependency>
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpclient</artifactId>
@@ -20,11 +48,6 @@
             <groupId>com.googlecode.json-simple</groupId>
             <artifactId>json-simple</artifactId>
             <version>1.1.1</version>
-        </dependency>
-        <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>kinetic-bridgehub-adapter</artifactId>
-            <version>1.0.3</version>
         </dependency>
         <dependency>
             <groupId>org.yaml</groupId>
@@ -44,6 +67,13 @@
         <maven.build.timestamp.format>yyyy-MM-dd HH:mm</maven.build.timestamp.format>
     </properties>
     <build>
+        <extensions>
+            <extension>
+                <groupId>org.springframework.build</groupId>
+                <artifactId>aws-maven</artifactId>
+                <version>5.0.0.RELEASE</version>
+            </extension>
+        </extensions>
         <plugins>
             <!-- Testing -->
             <plugin>
@@ -73,29 +103,6 @@
                         </manifestEntries>
                     </archive>
                 </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-install-plugin</artifactId>
-                <version>2.5.2</version>
-                <executions>
-                    <execution>
-                        <id>install-bridgehub-adapter</id>
-                        <phase>clean</phase>
-                        <configuration>
-                            <file>${basedir}/lib/kinetic-bridgehub-adapter-1.0.3.jar</file>
-                            <repositoryLayout>default</repositoryLayout>
-                            <groupId>com.kineticdata.bridges.adapter</groupId>
-                            <artifactId>kinetic-bridgehub-adapter</artifactId>
-                            <version>1.0.3</version>
-                            <packaging>jar</packaging>
-                            <generatePom>true</generatePom>
-                        </configuration>
-                        <goals>
-                            <goal>install-file</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
         </plugins>
         <finalName>${project.artifactId}-${project.version}</finalName>
