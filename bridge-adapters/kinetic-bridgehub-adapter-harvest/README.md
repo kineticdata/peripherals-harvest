@@ -48,8 +48,8 @@ An adapter for interacting with the Harvest v2 api
 
 ## Notes
 This adapter has been tested with the 1.0.3 bridgehub adapter.
-The adapter only supports personal access token authentication at this time.
-    * To configure [personal access token](https://id.getharvest.com/)
-    * Information on [personal access token](https://help.getharvest.com/api-v2/authentication-api/authentication/authentication/#personal-access-tokens)
-Pagination and sort order are not supported by the adapter, but Harvest source api behavior is supported.
+The adapter only supports personal access token authentication at this time.  
+    - To configure [personal access token](https://id.getharvest.com/)
+    - Information on [personal access token](https://help.getharvest.com/api-v2/authentication-api/authentication/authentication/#personal-access-tokens)  
+Pagination and sort order are not supported by the adapter, but Harvest source api behavior is supported.  
 From more information about harvest api visit [Harvest API v2 Documentation](https://help.getharvest.com/api-v2/)
