@@ -43,6 +43,20 @@ public class HarvestAdapter implements BridgeAdapter {
     /** Defines the logger */
     protected static final org.slf4j.Logger logger = LoggerFactory.getLogger(HarvestAdapter.class);
     
+    /** Adapter version constant. */
+    public static String VERSION;
+    /** Load the properties version from the version.properties file. */
+    static {
+        try {
+            java.util.Properties properties = new java.util.Properties();
+            properties.load(HarvestAdapter.class.getResourceAsStream("/"+HarvestAdapter.class.getName()+".version"));
+            VERSION = properties.getProperty("version");
+        } catch (IOException e) {
+            logger.warn("Unable to load "+HarvestAdapter.class.getName()+" version properties.", e);
+            VERSION = "Unknown";
+        }
+    }
+    
     /** Defines the collection of property names for the adapter */
     public static class Properties {
         public static final String PROPERTY_ACCESS_TOKEN = "Access Token";
@@ -82,9 +96,7 @@ public class HarvestAdapter implements BridgeAdapter {
     
     @Override
     public String getVersion() {
-        // Bridgehub uses this version instead of the Maven version when 
-        // displaying it in the console
-        return "2.0.0";
+       return  VERSION;
     }
     
     @Override
