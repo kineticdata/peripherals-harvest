@@ -18,38 +18,38 @@ An adapter for interacting with the Harvest v2 api
 | :---------------------- | :------------------------- |
 | Contacts                | Get client contacts   |
 | Clients                 | Get clients   |
-| Invoice Messages        | Get messages associated with a given invoice   |
-| Invoice Payments        | Get payments associate with a given invoice   |
 | Invoices                | Get invoices   |
+| Invoice > Messages      | Get messages associated with a given invoice   |
+| Invoice > Payments      | Get payments associate with a given invoice   |
 | Invoice Item Categories | Get invoice item categories   |
-| Estimate Messages       | Get messages associated with a given estimate   |
+| Estimate > Messages     | Get messages associated with a given estimate   |
 | Estimates               | Get estimates   |
 | Estimate Item Categories| Get estimate item categories |
-| Expenses                | Get expenses |
-| Expense Categories      | Get expense categories |
 | Tasks                   | Get tasks |
 | Time Entries            | Get time entries |
 | User Assignments        | Get projects user assignments, active and archived |
 | Task Assignments        | Get task assignments |
 | Projects                | Get projects |
-| Roles                   | Get roles in the account |
+<!-- | Roles                   | Get roles in the account |
 | Billable Rates          | Get billable rates for the user identified by USER_ID |
 | Cost Rates              | Get cost rates for the user identified by USER_ID |
-| Project Assignments     | Get active project assignments for the user identified by USER_ID |
+| Project Assignments     | Get active project assignments for the user identified by USER_ID | -->
+<!-- | Expenses                | Get expenses |
+| Expense Categories      | Get expense categories | -->
 
-## configuration example
+## Configuration example
 | Structure               | Qualification Mapping      | Description |
 | :---------------------- | :------------------------- | :------------------------- |
 | Projects                | projects                   | Get a list of projects     |
-| Projects                | projects?client_id=2372100 | Only return projects belonging to the client with the given ID|
-| Projects                | projects/14308069          | Retrieve a single project  |
-| Users                   | users/{USER_ID}/billable_rates | Get a list of billable rates for the user |
-| Users                   | /users/{USER_ID}/billable_rates/{billable_RATE_ID} | Retrieve a billable rate for a user |
+| Projects                | client_id=2372100 | Only return projects belonging to the client with the given ID|
+| Projects                | id=14308069          | Retrieve a single project  |
+| Users                   | users/{USER_ID} | Get a user |
 
 ## Notes
-This adapter has been tested with the 1.0.3 bridgehub adapter.
-The adapter only supports personal access token authentication at this time.  
-    - To configure [personal access token](https://id.getharvest.com/)
+* This adapter has been tested with the 1.0.3 bridgehub adapter.
+* The adapter only supports personal access token authentication at this time.  
+    - To configure [personal access token](https://id.getharvest.com/)  
     - Information on [personal access token](https://help.getharvest.com/api-v2/authentication-api/authentication/authentication/#personal-access-tokens)  
-Pagination and sort order are not supported by the adapter, but Harvest source api behavior is supported.  
-From more information about harvest api visit [Harvest API v2 Documentation](https://help.getharvest.com/api-v2/)
+* Pagination and sort order are not supported by the adapter, but Harvest source api behavior is supported.  
+* From more information about harvest api visit [Harvest API v2 Documentation](https://help.getharvest.com/api-v2/)
+* This adapter requires an id parameter to be passed to do a retrieve an element.
