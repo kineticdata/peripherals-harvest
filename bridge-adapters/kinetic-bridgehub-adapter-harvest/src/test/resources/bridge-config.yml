@@ -2,8 +2,8 @@
 # ie. For the property with a label of Username, the configuration will be Username: "test.user"
 # Do this for all of the configuration values
 Bridge Configuration:
-    Access Token: ""
-    Account Id: ""
+    Access Token: "635809.pt.aOOjd6ZUux2CJVVZxg5FjlGjLfZyereVgJtEPCoHutDaaBytyDtniK5hd3zSROl0gEqSlo6dYoGIpwj78Ft4tQ"
+    Account Id: "284198"
 
 # Setting the different request configurations for the Standard Bridgehub tests
     # Structure: Structure string
