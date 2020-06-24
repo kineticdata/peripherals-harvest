@@ -9,3 +9,7 @@ Harvest [bridge-adapter] (2019-12-31)
 Harvest [bridge-adapter] (2020-06-09)
   * \[kinetic-bridge-adapter-harvest] [v2.1.0]
     * Refactored the adapter to leverage a different "adapter api".
+
+Harvest [bridge-adapter] (2020-06-24)
+  * \[kinetic-bridge-adapter-harvest] [v2.1.0]
+    * Removed the lib dir and updated after merge.
