@@ -72,6 +72,7 @@ public class HarvestAdapter implements BridgeAdapter {
             // put("Project Assignments", new AdapterMapping("Project Assignments",
             // HarvestAdapter::pathProjectAssignments));
             put("Users", new AdapterMapping("Users", "users", HarvestAdapter::pathUsers));
+            put("Reports", new AdapterMapping("Reports", "results", HarvestAdapter::pathReports));
             put("Adhoc", new AdapterMapping("Adhoc", "", HarvestAdapter::pathAdhoc));
         }
     };
@@ -178,7 +179,7 @@ public class HarvestAdapter implements BridgeAdapter {
 
         // Path builder functions may mutate the parameters Map;
         String path = mapping.getPathbuilder().apply(structureList, parameters);
-
+        
         Map<String, NameValuePair> parameterMap = buildNameValuePairMap(parameters);
 
         // Retrieve the objects based on the structure from the source
@@ -230,7 +231,11 @@ public class HarvestAdapter implements BridgeAdapter {
 
         // Path builder functions may mutate the parameters Map;
         String path = mapping.getPathbuilder().apply(structureList, parameters);
-
+        
+        // Accessor values is either passed as a parameter in the qualification
+        // mapping for Adhoc or on the mapping for all other structures.
+        String accessor = getAccessor(mapping, parameters);
+        
         Map<String, NameValuePair> parameterMap = buildNameValuePairMap(parameters);
 
         // Retrieve the objects based on the structure from the source
@@ -242,7 +247,7 @@ public class HarvestAdapter implements BridgeAdapter {
 
         // Check if results are singular or mutiple
         // TODO: support results with a list that has one element
-        JSONArray objects = (JSONArray) obj.get(request.getStructure().replaceAll(" ", "_").toLowerCase());
+        JSONArray objects = (JSONArray) obj.get(accessor);
         if (objects != null) {
             throw new BridgeError("Multiple results found for retrieve.  This is" + "invalid.");
         }
@@ -308,6 +313,10 @@ public class HarvestAdapter implements BridgeAdapter {
         // Path builder functions may mutate the parameters Map;
         String path = mapping.getPathbuilder().apply(structureList, parameters);
 
+        // Accessor values is either passed as a parameter in the qualification
+        // mapping for Adhoc or on the mapping for all other structures.
+        String accessor = getAccessor(mapping, parameters);
+        
         Map<String, NameValuePair> parameterMap = buildNameValuePairMap(parameters);
 
         // Retrieve the objects based on the structure from the source
@@ -325,7 +334,7 @@ public class HarvestAdapter implements BridgeAdapter {
         JSONObject obj = (JSONObject) JSONValue.parse(output);
 
         // Get the array of objects. Each Structure has a different accessor name.
-        JSONArray objects = (JSONArray) obj.get(request.getStructure().replaceAll(" ", "_").toLowerCase());
+        JSONArray objects = (JSONArray) obj.get(accessor);
 
         // Create a List of records that will be used to make a RecordList object.
         List<Record> recordList = new ArrayList<Record>();
@@ -393,6 +402,26 @@ public class HarvestAdapter implements BridgeAdapter {
     /*--------------------------------------------------------------------------
      * HELPER METHODS
      *------------------------------------------------------------------------*/
+        /**
+     * Get accessor value. If structure is Adhoc remove accessor from parameters.
+     * 
+     * @param mapping
+     * @param parameters
+     * @return 
+     */
+    private String getAccessor(AdapterMapping mapping, Map<String, String> parameters) {
+        String accessor;
+        
+        if (mapping.getStructure().equals("Adhoc")) {
+            accessor = parameters.get("accessor");
+            parameters.remove("accessor");
+        } else {
+            accessor = mapping.getAccessor();
+        }
+        
+        return accessor;
+    }
+    
     /**
      * This helper is intended to abstract the parser get parameters from the core
      * methods.
@@ -539,7 +568,7 @@ public class HarvestAdapter implements BridgeAdapter {
     protected static String pathInvoices(List<String> structureList, Map<String, String> parameters)
             throws BridgeError {
 
-        String path = "/clients";
+        String path = "/invoices";
         if (parameters.containsKey("id")) {
             path = String.format("%s/%s", path, parameters.get("id"));
         }
@@ -687,6 +716,51 @@ public class HarvestAdapter implements BridgeAdapter {
             path = String.format("%s/%s", path, parameters.get("id"));
         }
 
+        return path;
+    }
+    
+    protected static String pathReports(List<String> structureList, Map<String, String> parameters) throws BridgeError {
+        if (structureList.size() < 2) {
+            throw new BridgeError("The Reports structure requires at lease two segments");
+        }
+        
+        String path = "/reports";
+
+        switch (structureList.get(1)) {
+            case "Expenses":
+                path = path + "/expenses";
+                if (parameters.containsKey("report_type")) {
+                    path = String.format("%s/%s", path, parameters.get("report_type"));
+                    parameters.remove("report_type");
+                } else {
+                    throw new BridgeError("The Reports > Expenses structure requires"
+                        + " a parameter of report_type.  valid report types are:"
+                        + " clients, projects, categories, and team.");
+                }
+                break;
+            case "Uninvoiced":
+                path = path + "/uninvoiced";
+                break;
+            case "Time":
+                path = path + "/time";
+                if (parameters.containsKey("report_type")) {
+                   path = String.format("%s/%s", path, parameters.get("report_type"));
+                    parameters.remove("report_type");
+                } else {
+                    throw new BridgeError("The Reports > Time structure requires"
+                        + " a parameter of report_type.  valid report types are:"
+                        + " clients, projects, tasks, and team.");
+                }
+                break;
+            case "Project Budget":
+                path = path + "/project_budget";
+                break;
+            default:
+                throw new BridgeError(String.format("The Reports structure does "
+                    + "not have a %s segment.  Valid second segments are Expenses,"
+                    + " Uninvoiced, Time, Project Budget.", structureList.get(1)));        
+        }
+        
         return path;
     }
 

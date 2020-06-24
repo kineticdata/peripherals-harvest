@@ -68,7 +68,7 @@ public class HarvestApiHelper {
             
             // Handle all other faild repsonses
             if (responseCode >= 400) {
-                handleFailedReqeust(responseCode);
+                handleFailedReqeust(responseCode, output);
             }
         }
         catch (IOException e) {
@@ -79,10 +79,13 @@ public class HarvestApiHelper {
         return output;
     }
     
-    private void handleFailedReqeust (int responseCode) throws BridgeError {
+    private void handleFailedReqeust (int responseCode, String output) 
+        throws BridgeError {
+        
         switch (responseCode) {
             case 400:
-                throw new BridgeError("400: Bad Reqeust");
+                throw new BridgeError(String.format("400: Bad Reqeust Response:"
+                    + " %s", output));
             case 401:
                 throw new BridgeError("401: Unauthorized");
             case 404:
