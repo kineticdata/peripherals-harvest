@@ -13,19 +13,17 @@ import java.util.Map;
  * Properties:
  *  String structure - Name of the data model.
  *  PathBuilder pathBuilder - URL path to asset.  Defined in child class.
- *  String plural - property name accessor when multiple results returned
+ *  String accessor - property name accessor when multiple results returned.
  */
 public class AdapterMapping {
     private final String structure;
+    private String accessor;
     private final PathBuilder pathbuilder;
-    private final String plural;
     
-    public AdapterMapping(String structure, String plural, 
-        PathBuilder pathbuilder){
-        
+    public AdapterMapping(String structure, String accessor, PathBuilder pathbuilder){
+        this.accessor = accessor;
         this.structure = structure;
         this.pathbuilder = pathbuilder;
-        this.plural = plural;
     }
     
     /**
@@ -47,8 +45,8 @@ public class AdapterMapping {
     /**
      * @return the plural accessor
      */
-    public String getPlural() {
-        return plural;
+    public String getAccessor() {
+        return accessor;
     }
 
     /**

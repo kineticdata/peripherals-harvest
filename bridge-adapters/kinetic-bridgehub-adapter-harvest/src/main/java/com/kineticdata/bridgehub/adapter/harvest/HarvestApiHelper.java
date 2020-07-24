@@ -32,10 +32,10 @@ public class HarvestApiHelper {
         this.accountId = accountId;
     }
         
-    public String executeRequest (String path) throws BridgeError{
+    public JSONObject executeRequest (String path) throws BridgeError{
         
         String url = baseUrl + path;
-        String output;      
+        JSONObject output;      
         // System time used to measure the request/response time
         long start = System.currentTimeMillis();
         
@@ -46,8 +46,6 @@ public class HarvestApiHelper {
             HttpGet get = new HttpGet(url);
             
             // Append HTTP BASIC Authorization header to HttpGet call
-            String accessToken = this.accessToken;
-            String accountId = this.accountId;
             get.setHeader("Authorization", "Bearer " + accessToken);
             get.setHeader("Harvest-Account-ID", accountId);
             get.setHeader("Content-Type", "application/json");
@@ -64,7 +62,7 @@ public class HarvestApiHelper {
             HttpEntity entity = response.getEntity();
             
             // Confirm that response is a JSON object
-            output = EntityUtils.toString(entity);
+            output = parseResponse(EntityUtils.toString(entity));
             
             // Handle all other faild repsonses
             if (responseCode >= 400) {
@@ -73,7 +71,7 @@ public class HarvestApiHelper {
         }
         catch (IOException e) {
             throw new BridgeError(
-                "Unable to make a connection to the Azure service server.", e);
+                "Unable to make a connection to the Harvest service server.", e);
         }
         
         return output;

@@ -11,6 +11,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import org.junit.Test;
 import static org.junit.Assert.assertNull;
@@ -43,7 +45,7 @@ public class HarvestTest extends BridgeAdapterTestBase{
         request.setQuery("id=2372100");
         
         Record record;
-        Map<String,Object> recordMap = new HashMap<String,Object>();
+        Map<String,Object> recordMap = new HashMap<>();
         try {
             record = getAdapter().retrieve(request);
             recordMap = record.getRecord();
@@ -69,7 +71,7 @@ public class HarvestTest extends BridgeAdapterTestBase{
         request.setQuery("");
         
         Record record;
-        Map<String,Object> recordMap = new HashMap<String,Object>();
+        Map<String,Object> recordMap = new HashMap<>();
         try {
             record = getAdapter().retrieve(request);
             recordMap = record.getRecord();
@@ -95,7 +97,7 @@ public class HarvestTest extends BridgeAdapterTestBase{
         request.setQuery("");
         
         Record record;
-        Map<String,Object> recordMap = new HashMap<String,Object>();
+        Map<String,Object> recordMap = new HashMap<>();
         try {
             record = getAdapter().retrieve(request);
             recordMap = record.getRecord();
@@ -128,6 +130,19 @@ public class HarvestTest extends BridgeAdapterTestBase{
         
         assertNull(error);
         assertTrue(count.getValue() > 0);
+        
+        request.setStructure("Adhoc");
+        request.setQuery("/projects?accessor=projects");
+        
+        Count adhocCount = null;
+        try {
+            adhocCount = getAdapter().count(request);
+        } catch (BridgeError e) {
+            error = e;
+        }
+        
+        assertNull(error);
+        assertTrue(Objects.equals(adhocCount.getValue(), count.getValue()));
     }
     
     @Test
@@ -141,7 +156,7 @@ public class HarvestTest extends BridgeAdapterTestBase{
         
         request.setStructure("Projects");
         request.setFields(fields);
-        request.setQuery("projects?is_active=<%=parameter[\"Is Active\"]%>");
+        request.setQuery("is_active=<%=parameter[\"Is Active\"]%>");
         
         Map parameters = new HashMap();
         parameters.put("Is Active", "true");
@@ -172,7 +187,49 @@ public class HarvestTest extends BridgeAdapterTestBase{
         BridgeRequest request = new BridgeRequest();
         request.setStructure("Projects");
         request.setFields(fields);
-        request.setQuery("projects?is_active=<%=parameter[\"Is Active\"]%>"
+        request.setQuery("is_active=<%=parameter[\"Is Active\"]%>"
+                       + "&client_id=<%=parameter[\"Client Id\"]%>");
+                
+        Map parameters = new HashMap();
+        parameters.put("Is Active", "true");
+        parameters.put("Client Id", "2319519");
+        request.setParameters(parameters);
+        
+        RecordList list = null;
+        try {
+            list = getAdapter().search(request);
+        } catch (BridgeError e) {
+            error = e;
+        }
+        
+        assertNull(error);
+        assertTrue(list.getRecords().size() > 0);
+        
+        request.setStructure("Adhoc");
+        request.setQuery("/projects?accessor=projects&"
+                + "is_active=<%=parameter[\"Is Active\"]%>"
+                + "&client_id=<%=parameter[\"Client Id\"]%>");
+        
+        RecordList adhocList = null;
+        try {
+            adhocList = getAdapter().search(request);
+        } catch (BridgeError e) {
+            error = e;
+        }
+        
+        assertNull(error);
+        assertTrue(list.getRecords().size() == adhocList.getRecords().size());
+    }
+    
+    @Test
+    public void test_search_empty_fields() throws Exception{
+        BridgeError error = null;
+        
+        assertNull(error);
+        
+        BridgeRequest request = new BridgeRequest();
+        request.setStructure("Projects");
+        request.setQuery("is_active=<%=parameter[\"Is Active\"]%>"
                        + "&client_id=<%=parameter[\"Client Id\"]%>");
                 
         Map parameters = new HashMap();
@@ -192,14 +249,18 @@ public class HarvestTest extends BridgeAdapterTestBase{
     }
     
     @Test
-    public void test_search_empty_fields() throws Exception{
-        BridgeError error = null;
+    public void test_json_path() throws Exception {
+         BridgeError error = null;
         
-        assertNull(error);
+        // Create the Bridge Request
+        List<String> fields = new ArrayList<String>();
+        fields.add("id");
+        fields.add("$.client.currency");
         
         BridgeRequest request = new BridgeRequest();
         request.setStructure("Projects");
-        request.setQuery("projects?is_active=<%=parameter[\"Is Active\"]%>"
+        request.setFields(fields);
+        request.setQuery("is_active=<%=parameter[\"Is Active\"]%>"
                        + "&client_id=<%=parameter[\"Client Id\"]%>");
                 
         Map parameters = new HashMap();
@@ -215,10 +276,11 @@ public class HarvestTest extends BridgeAdapterTestBase{
         }
         
         assertNull(error);
-        assertTrue(list.getRecords().size() > 0);
+        // Assume that the client has currency set to USD.
+        assertTrue(list.getRecords().get(0).getValue("$.client.currency").equals("USD"));
     }
     
-        
+    
     @Test
     public void test_user_dec_sort() throws Exception{
         BridgeError error = null;
@@ -265,7 +327,7 @@ public class HarvestTest extends BridgeAdapterTestBase{
         assertNull(error);
         
         // Create the Bridge Request
-        List<String> fields = new ArrayList<String>();
+        List<String> fields = new ArrayList<>();
         fields.add("id");
         fields.add("first_name");
         
@@ -516,6 +578,19 @@ public class HarvestTest extends BridgeAdapterTestBase{
         
         assertNull(error);
         assertTrue(record.getRecord().containsKey("id"));
+        
+        request.setStructure("Adhoc");
+        request.setQuery("/projects/<%=parameter[\"Project Id\"]%>?accessor=projects");
+        
+        Record adhocRecord = null;
+        try {
+            adhocRecord = getAdapter().retrieve(request);
+        } catch (BridgeError e) {
+            error = e;
+        }
+        
+        assertNull(error);
+        assertEquals(record.getRecord(),adhocRecord.getRecord());
     }
     
     @Test

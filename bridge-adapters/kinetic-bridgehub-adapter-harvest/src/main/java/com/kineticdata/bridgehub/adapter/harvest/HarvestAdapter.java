@@ -1,5 +1,8 @@
 package com.kineticdata.bridgehub.adapter.harvest;
 
+import com.jayway.jsonpath.DocumentContext;
+import com.jayway.jsonpath.JsonPath;
+import com.jayway.jsonpath.JsonPathException;
 import com.kineticdata.bridgehub.adapter.BridgeAdapter;
 import com.kineticdata.bridgehub.adapter.BridgeError;
 import com.kineticdata.bridgehub.adapter.BridgeRequest;
@@ -40,7 +43,7 @@ public class HarvestAdapter implements BridgeAdapter {
     
     /*----------------------------------------------------------------------------------------------
      * STRUCTURES
-     *      AdapterMapping( Structure Name, Path Function)
+     *      AdapterMapping( Structure Name, accessor, Path Function)
      *--------------------------------------------------------------------------------------------*/
     public static Map<String,AdapterMapping> MAPPINGS 
         = new HashMap<String,AdapterMapping>() {{
@@ -192,18 +195,14 @@ public class HarvestAdapter implements BridgeAdapter {
         Map<String, NameValuePair> parameterMap = buildNameValuePairMap(parameters);
        
         // Retrieve the objects based on the structure from the source
-        String output = apiHelper.executeRequest(getUrl(path, parameterMap));
-        LOGGER.trace("Count Output: "+output);
-
-        // Parse the response string into a JSONObject
-        JSONObject object = (JSONObject)JSONValue.parse(output);
+        JSONObject responseObject = apiHelper.executeRequest(getUrl(path, parameterMap));
         
         // Get the number of elements in the returned array
-        Long tempCount = (Long)object.get("total_entries");
+        Long tempCount = (Long)responseObject.get("total_entries");
         Integer count = 0;
         // Single results will not have a total_entries property
         if (tempCount == null) {
-            Long singleResult = (Long)object.get("id");
+            Long singleResult = (Long)responseObject.get("id");
             if (singleResult == null) {
                 throw new BridgeError("The Count result was unexpected.  Please"
                         + "check query and rerun.");
@@ -242,57 +241,36 @@ public class HarvestAdapter implements BridgeAdapter {
         
         // Path builder functions may mutate the parameters Map;
         String path = mapping.getPathbuilder().apply(structureList, parameters);
+                
+        // Accessor values is either passed as a parameter in the qualification
+        // mapping for Adhoc or on the mapping for all other structures.
+        String accessor = getAccessor(mapping, parameters);
         
         Map<String, NameValuePair> parameterMap = buildNameValuePairMap(parameters);
 
         // Retrieve the objects based on the structure from the source
-        String output = apiHelper.executeRequest(getUrl(path, parameterMap));
-        LOGGER.trace("Retrieve Output: "+output);
+        JSONObject responseObject = apiHelper.executeRequest(getUrl(path, parameterMap));
         
-        // Parse the response string into a JSONObject
-        JSONObject obj = (JSONObject)JSONValue.parse(output);
-        
-        // Check if results are singular or mutiple
-        // TODO: support results with a list that has one element
-        JSONArray objects = (JSONArray)obj.get(
-            request.getStructure().replaceAll(" ", "_").toLowerCase()
-        );
-        if (objects != null) {
-            throw new BridgeError("Multiple results found for retrieve.  This is"
-                    + "invalid.");
-        }
-        
-        List<String> fields = request.getFields();
-        if (fields == null) { 
-            fields = new ArrayList();
-        }
-        
-        if(fields.isEmpty()){
-            fields.addAll(obj.keySet());
-        }
-        
-        // If specific fields were specified then we remove all of the 
-        // nonspecified properties from the object.
-        Set<Object> removeKeySet = new HashSet<Object>();
-        for(Object key: obj.keySet()){
-            if(fields.contains(key)){
-                continue;
-            }else{
-                LOGGER.trace("Remove Key: "+key);
-                removeKeySet.add(key);
-            }
-        }
-        obj.keySet().removeAll(removeKeySet);
-        
-        Object[] keys = obj.keySet().toArray();
-        JSONObject convertedObj = convertValues(obj,keys);
-        
-        // Create a Record object from the responce JSONObject
-        Record record;
-        if (convertedObj != null) {
-            record = new Record(convertedObj);
+        JSONArray responseArray = new JSONArray();
+        if (responseObject.containsKey(accessor)) {
+            responseArray = getResponseData(responseObject.get(accessor));
         } else {
-            record = new Record();
+            responseArray = getResponseData(responseObject);
+        }
+        
+        Record record = new Record();
+        if (responseArray.size() == 1) {
+            // Reassign object to single result 
+            JSONObject object = (JSONObject)responseArray.get(0);
+                
+            List<String> fields = getFields(request.getFields() == null ? 
+                new ArrayList() : request.getFields(), object);
+            record = buildRecord(fields, object);
+        } else if (responseArray.isEmpty()) {
+            LOGGER.debug("No results found for query: {}", request.getQuery());
+        } else {
+            throw new BridgeError ("Retrieve must return a single result."
+                + " Multiple results found.");
         }
         
         // Return the created Record object
@@ -324,85 +302,42 @@ public class HarvestAdapter implements BridgeAdapter {
         // Path builder functions may mutate the parameters Map;
         String path = mapping.getPathbuilder().apply(structureList, parameters);
         
+        // Accessor values is either passed as a parameter in the qualification
+        // mapping for Adhoc or on the mapping for all other structures.
+        String accessor = getAccessor(mapping, parameters);
+        
         Map<String, NameValuePair> parameterMap = buildNameValuePairMap(parameters);
         
         // Retrieve the objects based on the structure from the source
-        String output;
-        if (request.getMetadata() != null) {
-            output = apiHelper.executeRequest(getUrl(path, parameterMap));
+        JSONObject responseObject = apiHelper.executeRequest(getUrl(path, 
+            parameterMap));
+        
+        JSONArray responseArray = new JSONArray();
+        if (responseObject.containsKey(accessor)) {
+            responseArray = getResponseData(responseObject.get(accessor));
         } else {
-            // TODO: support order and pagination.
-            output = apiHelper.executeRequest(getUrl(path, parameterMap));
+            responseArray = getResponseData(responseObject);
         }
         
-        LOGGER.trace("Search Output: " + output);
-        
-        // Parse the response string into a JSONObject
-        JSONObject obj = (JSONObject)JSONValue.parse(output);
-        
-        // Get the array of objects. Each Structure has a different accessor name.
-        JSONArray objects = (JSONArray)obj.get(
-            request.getStructure().replaceAll(" ", "_").toLowerCase()
-        );
-        
         // Create a List of records that will be used to make a RecordList object.
-        List<Record> recordList = new ArrayList<Record>();
-        
-        // If the user doesn't enter any values for fields we return all of the fields.
-        List<String> fields = request.getFields();
-        if (fields == null) { 
-            fields = new ArrayList();
-        }        
+        List<Record> recordList = new ArrayList<Record>();      
+        List<String> fields = request.getFields() == null ? new ArrayList() : 
+            request.getFields();        
+        if(responseArray != null && responseArray.isEmpty() != true){
+            fields = getFields(fields, (JSONObject)responseArray.get(0));
 
-        if(objects.isEmpty() != true){
-            JSONObject firstObj = (JSONObject)objects.get(0);
-
-            Object[] keys = firstObj.keySet().toArray();
-            
-            Set<Object> removeKeySet = new HashSet<Object>();
-            
-            // If no keys where provided to the search then we return all
-            // properties.
-            if(fields.isEmpty()){
-                fields.addAll(firstObj.keySet());
-            } else {
-            
-                // If specific fields were specified then we remove all of the 
-                // nonspecified properties from the object.
-                for(Object key: firstObj.keySet()){
-                    if(fields.contains(key)){
-                        continue;
-                    } else {
-                        LOGGER.trace("Remove Key: "+key);
-                        removeKeySet.add(key);
-                    }
-                }
-            }
-            
             // Iterate through the responce objects and make a new Record for each.
-            for (Object o : objects) {
-                JSONObject object = (JSONObject)o;
-
-                // Remove all keys that are not in the fields list.
-                object.keySet().removeAll(removeKeySet);
+            for (Object o : responseArray) {
+                JSONObject obj = (JSONObject)o;
+                Record record = buildRecord(fields, obj);
                 
-                // Reset keys to the new object's keySet.
-                keys = object.keySet().toArray();
-                
-                JSONObject convertedObj = convertValues(object,keys);
-                Record record;
-                if (convertedObj != null) {
-                    record = new Record(convertedObj);
-                } else {
-                    record = new Record();
-                }
                 // Add the created record to the list of records
                 recordList.add(record);
             }
         }
         
         Map<String,String> metadata = new LinkedHashMap<String,String>();
-        metadata.put("next_page", String.valueOf(obj.get("next_page")));
+        metadata.put("next_page", String.valueOf(responseObject.get("next_page")));
         
         // Return the RecordList object
         return new RecordList(fields, recordList, metadata);
@@ -411,6 +346,89 @@ public class HarvestAdapter implements BridgeAdapter {
     /*--------------------------------------------------------------------------
      * HELPER METHODS
      *------------------------------------------------------------------------*/
+    protected List<String> getFields(List<String> fields, JSONObject jsonobj) {
+        // if no fields were provided then all fields will be returned. 
+        if(fields.isEmpty()){
+            fields.addAll(jsonobj.keySet());
+        }
+        
+        return fields;
+    }
+    
+    /**
+     * Build a Record.  If no fields are provided all fields will be returned.
+     * 
+     * @param fields
+     * @param jsonobj
+     * @return Record
+     */
+    protected Record buildRecord (List<String> fields, JSONObject jsonobj) {
+        JSONObject obj = new JSONObject();
+        DocumentContext jsonContext = JsonPath.parse(jsonobj); 
+        
+        fields.stream().forEach(field -> {
+            // either use JsonPath or just add the field value.  We're assuming
+            // all JsonPath usages will begin with $[ or $.. 
+            if (field.startsWith("$.") || field.startsWith("$[")) {
+                try {
+                    obj.put(field, jsonContext.read(field));
+                } catch (JsonPathException e) {
+                    // if field is a valid path but object is missing the property
+                    // return null for field.  This is consistent with existing 
+                    // adapter behavior.
+                    if (e.getMessage().startsWith("Missing property")) {
+                        obj.put(field, null);
+                        LOGGER.debug(String.format("%s was not found, returning"
+                            + " null value", field), e);
+                    } else {   
+                        throw new JsonPathException(String.format("There was an issue"
+                            + " reading %s", field), e);
+                    }
+                }
+            } else {
+                obj.put(field, jsonobj.get(field));
+            }
+        });
+        
+        Record record = new Record(obj, fields);
+        return record;
+    }
+    
+        
+    protected JSONArray getResponseData(Object responseData) {
+        JSONArray responseArray = new JSONArray();
+        
+        if (responseData instanceof JSONArray) {
+            responseArray = (JSONArray)responseData;
+        }
+        else if (responseData instanceof JSONObject) {
+            // It's an object
+            responseArray.add((JSONObject)responseData);
+        }
+        
+        return responseArray;
+    }
+    
+    /**
+     * Get accessor value. If structure is Adhoc remove accessor from parameters.
+     * 
+     * @param mapping
+     * @param parameters
+     * @return 
+     */
+    private String getAccessor(AdapterMapping mapping, Map<String, String> parameters) {
+        String accessor;
+        
+        if (mapping.getStructure().equals("Adhoc")) {
+            accessor = parameters.get("accessor");
+            parameters.remove("accessor");
+        } else {
+            accessor = mapping.getAccessor();
+        }
+        
+        return accessor;
+    }
+    
     /**
      * This helper is intended to abstract the parser get parameters from the core
      * methods.
@@ -543,6 +561,7 @@ public class HarvestAdapter implements BridgeAdapter {
         String path = "/contacts";
         if (parameters.containsKey("id")) {
             path = String.format("%s/%s", path, parameters.get("id"));
+            parameters.remove("id");
         }
         
         return path;
@@ -554,6 +573,7 @@ public class HarvestAdapter implements BridgeAdapter {
         String path = "/clients";
         if (parameters.containsKey("id")) {
             path = String.format("%s/%s", path, parameters.get("id"));
+            parameters.remove("id");
         }
         
         return path;
@@ -565,6 +585,7 @@ public class HarvestAdapter implements BridgeAdapter {
         String path = "/clients";
         if (parameters.containsKey("id")) {
             path = String.format("%s/%s", path, parameters.get("id"));
+            parameters.remove("id");
         }
         if (structureList.contains("Payments")) {
             path = String.format("%s/%s", path, "payments");
@@ -581,6 +602,7 @@ public class HarvestAdapter implements BridgeAdapter {
         String path = "/invoice_item_categories";
         if (parameters.containsKey("id")) {
             path = String.format("%s/%s", path, parameters.get("id"));
+            parameters.remove("id");
         }
         
         return path;
@@ -592,6 +614,7 @@ public class HarvestAdapter implements BridgeAdapter {
         String path = "/estimates";
         if (parameters.containsKey("id")) {
             path = String.format("%s/%s", path, parameters.get("id"));
+            parameters.remove("id");
         }
         if (structureList.contains("Messages")) {
             path = String.format("%s/%s", path, "messages");
@@ -606,6 +629,7 @@ public class HarvestAdapter implements BridgeAdapter {
         String path = "/estimate_item_categories";
         if (parameters.containsKey("id")) {
             path = String.format("%s/%s", path, parameters.get("id"));
+            parameters.remove("id");
         }
         
         return path;
@@ -628,6 +652,7 @@ public class HarvestAdapter implements BridgeAdapter {
         String path = "/tasks";
         if (parameters.containsKey("id")) {
             path = String.format("%s/%s", path, parameters.get("id"));
+            parameters.remove("id");
         }
         
         return path;
@@ -639,6 +664,7 @@ public class HarvestAdapter implements BridgeAdapter {
         String path = "/time_entries";
         if (parameters.containsKey("id")) {
             path = String.format("%s/%s", path, parameters.get("id"));
+            parameters.remove("id");
         }
         
         return path;
@@ -658,20 +684,22 @@ public class HarvestAdapter implements BridgeAdapter {
         String path = "/task_assignments";
 
         return path;
-    }
-    
+    }      
+            
     protected static String pathProjects(List<String> structureList,
         Map<String, String> parameters) throws BridgeError {
 
         String path = "/projects";
         if (parameters.containsKey("id")) {
             path = String.format("%s/%s", path, parameters.get("id"));
+            parameters.remove("id");
         }
         if (structureList.contains("Task Assignments")) {
             path = String.format("%s/%s", path, "task_assignments");
             if (parameters.containsKey("task_assignment_id")) {
                 path = String.format("%s/%s", path, 
                     parameters.get("task_assignment_id"));
+                parameters.remove("task_assignment_id");
             }
         }
         if (structureList.contains("User Assignments")) {
@@ -679,6 +707,7 @@ public class HarvestAdapter implements BridgeAdapter {
             if (parameters.containsKey("user_assignment_id")) {
                 path = String.format("%s/%s", path, 
                     parameters.get("user_assignment_id"));
+                parameters.remove("user_assignment_id");
             }
         }
         
@@ -712,6 +741,7 @@ public class HarvestAdapter implements BridgeAdapter {
         String path = "/users";
         if (parameters.containsKey("id")) {
             path = String.format("%s/%s", path, parameters.get("id"));
+            parameters.remove("id");
         }
         
         return path;
