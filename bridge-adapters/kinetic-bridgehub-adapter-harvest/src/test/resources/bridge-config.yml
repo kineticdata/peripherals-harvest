@@ -19,7 +19,6 @@ Test Request Configuration:
     Single Value Query: "id=11016819"
     Multiple Value Query: ""
 
-
 # Configuration of the various metadata options
     # Pagination Type: Possible values (string) - offset,token,none
         # offset: If the bridge uses a pageNumber,pageSize, and offset to handle pagination

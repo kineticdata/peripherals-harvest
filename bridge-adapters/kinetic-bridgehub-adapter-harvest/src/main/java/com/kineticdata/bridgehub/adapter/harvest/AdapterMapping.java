@@ -41,14 +41,16 @@ public class AdapterMapping {
     public String getStructure() {
         return structure;
     }
-    
+
     /**
-     * @return the plural accessor
+     * If request has multiple results the return object has a property key.
+     * This accessor maps the property key to a Structure.
+     * @return the accessor
      */
     public String getAccessor() {
         return accessor;
     }
-
+    
     /**
      * @return the pathbuilder
      */

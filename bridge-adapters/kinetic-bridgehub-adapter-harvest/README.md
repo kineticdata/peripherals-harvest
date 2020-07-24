@@ -30,7 +30,11 @@ An adapter for interacting with the Harvest v2 api
 | User Assignments        | Get projects user assignments, active and archived |
 | Task Assignments        | Get task assignments |
 | Projects                | Get projects |
-<!-- | Roles                   | Get roles in the account |
+| Reports > Expenses      | Requires a report_type parameter.  Valid values are clients, projects, categories, and team. |
+<!-- | Reports > Uninvoiced    | Get uninvoiced reports |
+| Reports > Time          | Requires a report_type parameter.  Valid values are clients, projects, tasks, and team. |
+| Reports > Project Budget| Get project budget reports |
+| Roles                   | Get roles in the account |
 | Billable Rates          | Get billable rates for the user identified by USER_ID |
 | Cost Rates              | Get cost rates for the user identified by USER_ID |
 | Project Assignments     | Get active project assignments for the user identified by USER_ID | -->

@@ -30,7 +30,7 @@ import org.json.simple.JSONValue;
 import org.slf4j.LoggerFactory;
 
 public class HarvestAdapter implements BridgeAdapter {
-        /*----------------------------------------------------------------------------------------------
+    /*----------------------------------------------------------------------------------------------
      * CONSTRUCTOR
      *--------------------------------------------------------------------------------------------*/
     public HarvestAdapter () {
@@ -83,63 +83,62 @@ public class HarvestAdapter implements BridgeAdapter {
 //            HarvestAdapter::pathProjectAssignments));
         put("Users", new AdapterMapping("Users", "users",
             HarvestAdapter::pathUsers));
+        put("Reports", new AdapterMapping("Reports", "results",
+            HarvestAdapter::pathReports));
         put("Adhoc", new AdapterMapping("Adhoc", "",
             HarvestAdapter::pathAdhoc));
     }};
-    
-    
+
     /*----------------------------------------------------------------------------------------------
      * PROPERTIES
      *--------------------------------------------------------------------------------------------*/
-    
+
     /** Defines the adapter display name */
     public static final String NAME = "Harvest Bridge";
-    
+
     /** Defines the LOGGER */
     protected static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger(HarvestAdapter.class);
-    
+
     /** Adapter version constant. */
     public static String VERSION;
     /** Load the properties version from the version.properties file. */
     static {
         try {
             java.util.Properties properties = new java.util.Properties();
-            properties.load(HarvestAdapter.class.getResourceAsStream("/"+HarvestAdapter.class.getName()+".version"));
+            properties
+                    .load(HarvestAdapter.class.getResourceAsStream("/" + HarvestAdapter.class.getName() + ".version"));
             VERSION = properties.getProperty("version");
         } catch (IOException e) {
-            LOGGER.warn("Unable to load "+HarvestAdapter.class.getName()+" version properties.", e);
+            LOGGER.warn("Unable to load " + HarvestAdapter.class.getName() + " version properties.", e);
             VERSION = "Unknown";
         }
     }
-    
+
     /** Defines the collection of property names for the adapter */
     public static class Properties {
         public static final String PROPERTY_ACCESS_TOKEN = "Access Token";
         public static final String PROPERTY_ACCOUNT_ID = "Account Id";
     }
-    
     private final ConfigurablePropertyMap properties = new ConfigurablePropertyMap(
-        new ConfigurableProperty(Properties.PROPERTY_ACCESS_TOKEN).setIsRequired(true),
-        new ConfigurableProperty(Properties.PROPERTY_ACCOUNT_ID)
-    );
+            new ConfigurableProperty(Properties.PROPERTY_ACCESS_TOKEN).setIsRequired(true),
+            new ConfigurableProperty(Properties.PROPERTY_ACCOUNT_ID));
 
     // Local variables to store the property values in
     private final HarvestQualificationParser parser;
     private HarvestApiHelper apiHelper;
-    
+
     private static final String API_PATH = "https://api.harvestapp.com/v2";
-    
+
     /*---------------------------------------------------------------------------------------------
      * SETUP METHODS
      *-------------------------------------------------------------------------------------------*/
-    
+
     @Override
     public void initialize() throws BridgeError {
         // Initializing the variables with the property values that were passed
         // when creating the bridge so that they are easier to use
         String accessToken = properties.getValue(Properties.PROPERTY_ACCESS_TOKEN);
         String accountId = properties.getValue(Properties.PROPERTY_ACCOUNT_ID);
-        
         apiHelper = new HarvestApiHelper(API_PATH, accessToken, accountId);
     }
 
@@ -147,32 +146,31 @@ public class HarvestAdapter implements BridgeAdapter {
     public String getName() {
         return NAME;
     }
-    
+
     @Override
     public String getVersion() {
-       return  VERSION;
+        return VERSION;
     }
-    
+
     @Override
-    public void setProperties(Map<String,String> parameters) {
+    public void setProperties(Map<String, String> parameters) {
         // This should always be the same unless there are special circumstances
         // for changing it
         properties.setValues(parameters);
     }
-    
+
     @Override
     public ConfigurablePropertyMap getProperties() {
         // This should always be the same unless there are special circumstances
         // for changing it
         return properties;
     }
-    
     /*---------------------------------------------------------------------------------------------
      * IMPLEMENTATION METHODS
      *-------------------------------------------------------------------------------------------*/
 
     @Override
-    public Count count(BridgeRequest request) throws BridgeError {        
+    public Count count(BridgeRequest request) throws BridgeError {
         // Log the access
         LOGGER.trace("Counting records");
         LOGGER.trace("  Structure: " + request.getStructure());
@@ -211,9 +209,9 @@ public class HarvestAdapter implements BridgeAdapter {
                 count = 1;
             }
         } else {
-            count = (int)tempCount.intValue();
+            count = (int) tempCount.intValue();
         }
-        
+
         // Create and return a count object that contains the count
         return new Count(count);
     }
@@ -272,7 +270,7 @@ public class HarvestAdapter implements BridgeAdapter {
             throw new BridgeError ("Retrieve must return a single result."
                 + " Multiple results found.");
         }
-        
+
         // Return the created Record object
         return record;
     }
@@ -335,14 +333,14 @@ public class HarvestAdapter implements BridgeAdapter {
                 recordList.add(record);
             }
         }
-        
-        Map<String,String> metadata = new LinkedHashMap<String,String>();
+
+        Map<String, String> metadata = new LinkedHashMap<String, String>();
         metadata.put("next_page", String.valueOf(responseObject.get("next_page")));
-        
+
         // Return the RecordList object
         return new RecordList(fields, recordList, metadata);
     }
-    
+
     /*--------------------------------------------------------------------------
      * HELPER METHODS
      *------------------------------------------------------------------------*/
@@ -436,15 +434,14 @@ public class HarvestAdapter implements BridgeAdapter {
      * @param request
      * @param mapping
      * @return
-     * @throws BridgeError 
+     * @throws BridgeError
      */
-    protected Map<String, String> getParameters(String query,  
-        AdapterMapping mapping) throws BridgeError {
-        
+    protected Map<String, String> getParameters(String query, AdapterMapping mapping) throws BridgeError {
+
         Map<String, String> parameters = new HashMap<>();
         if (mapping.getStructure() == "Adhoc") {
             // Adhoc qualifications are two segments. ie path?queryParameters
-            String [] segments = query.split("[?]",2);
+            String[] segments = query.split("[?]", 2);
 
             // getParameters only needs the queryParameters segment
             if (segments.length > 1) {
@@ -455,41 +452,40 @@ public class HarvestAdapter implements BridgeAdapter {
         } else {
             parameters = parser.getParameters(query);
         }
-        
+
         return parameters;
     }
-        
+
     /**
-     * This method checks that the structure on the request matches on in the 
-     * Mapping internal class.  Mappings map directly to the adapters supported 
-     * Structures.  
+     * This method checks that the structure on the request matches on in the
+     * Mapping internal class. Mappings map directly to the adapters supported
+     * Structures.
      * 
      * @param structure
      * @return Mapping
-     * @throws BridgeError 
+     * @throws BridgeError
      */
-    protected AdapterMapping getMapping (String structure) throws BridgeError{
+    protected AdapterMapping getMapping(String structure) throws BridgeError {
         AdapterMapping mapping = MAPPINGS.get(structure);
         if (mapping == null) {
-            throw new BridgeError("Invalid Structure: '" 
-                + structure + "' is not a valid structure");
+            throw new BridgeError("Invalid Structure: '" + structure + "' is not a valid structure");
         }
         return mapping;
     }
-    
+
     protected Map<String, NameValuePair> buildNameValuePairMap(Map<String, String> parameters) {
         Map<String, NameValuePair> parameterMap = new HashMap<>();
 
         parameters.forEach((key, value) -> {
             parameterMap.put(key, new BasicNameValuePair(key, value));
         });
-        
+
         return parameterMap;
     }
 
     private Map<String, String> addPaginationFromMetadata(Map<String, String> parameters,
-        Map<String, String> metadata) {
-        
+            Map<String, String> metadata) {
+
         if (metadata != null) {
             if (metadata.containsKey("page")) {
                 parameters.putIfAbsent("page", metadata.get("page"));
@@ -498,7 +494,7 @@ public class HarvestAdapter implements BridgeAdapter {
                 parameters.putIfAbsent("per_page", metadata.get("per_page"));
             }
         }
-        
+
         return parameters;
     }
     
@@ -747,6 +743,51 @@ public class HarvestAdapter implements BridgeAdapter {
         return path;
     }
     
+    protected static String pathReports(List<String> structureList, Map<String, String> parameters) throws BridgeError {
+        if (structureList.size() < 2) {
+            throw new BridgeError("The Reports structure requires at lease two segments");
+        }
+        
+        String path = "/reports";
+
+        switch (structureList.get(1)) {
+            case "Expenses":
+                path = path + "/expenses";
+                if (parameters.containsKey("report_type")) {
+                    path = String.format("%s/%s", path, parameters.get("report_type"));
+                    parameters.remove("report_type");
+                } else {
+                    throw new BridgeError("The Reports > Expenses structure requires"
+                        + " a parameter of report_type.  valid report types are:"
+                        + " clients, projects, categories, and team.");
+                }
+                break;
+            case "Uninvoiced":
+                path = path + "/uninvoiced";
+                break;
+            case "Time":
+                path = path + "/time";
+                if (parameters.containsKey("report_type")) {
+                   path = String.format("%s/%s", path, parameters.get("report_type"));
+                    parameters.remove("report_type");
+                } else {
+                    throw new BridgeError("The Reports > Time structure requires"
+                        + " a parameter of report_type.  valid report types are:"
+                        + " clients, projects, tasks, and team.");
+                }
+                break;
+            case "Project Budget":
+                path = path + "/project_budget";
+                break;
+            default:
+                throw new BridgeError(String.format("The Reports structure does "
+                    + "not have a %s segment.  Valid second segments are Expenses,"
+                    + " Uninvoiced, Time, Project Budget.", structureList.get(1)));        
+        }
+        
+        return path;
+    }
+    
     /**
      * Build path for Adhoc structure.
      * 
@@ -779,16 +820,16 @@ public class HarvestAdapter implements BridgeAdapter {
                 + "parameter.", structure, param));
         }
     }
- 
+
     // This method converts non string values to strings.
-    private JSONObject convertValues(JSONObject obj,Object[] keys){
-        for (Object key : keys){
-            Object value = obj.get((String)key);
+    private JSONObject convertValues(JSONObject obj, Object[] keys) {
+        for (Object key : keys) {
+            Object value = obj.get((String) key);
             if (!(value instanceof String)) {
                 LOGGER.trace("Converting: " + String.valueOf(value) + " to a string");
                 obj.put((String)key, String.valueOf(value));
             }
-        } 
+        }
         return obj;
     }
 }
