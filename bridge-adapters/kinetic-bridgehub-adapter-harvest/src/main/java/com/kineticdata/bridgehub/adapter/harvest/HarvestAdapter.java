@@ -506,30 +506,6 @@ public class HarvestAdapter implements BridgeAdapter {
     }
     
     /**
-     * Create a set of keys to remove from object prior to creating Record.
-     * 
-     * @param fields
-     * @param obj
-     * @return 
-     */
-    protected Set<Object> buildKeySet(List<String> fields, JSONObject obj) {
-        if(fields.isEmpty()){
-            fields.addAll(obj.keySet());
-        }
-            
-        // If specific fields were specified then we remove all of the 
-        // nonspecified properties from the object.
-        Set<Object> removeKeySet = new HashSet<>();
-        for(Object key: obj.keySet()){
-            if(!fields.contains(key)){
-                LOGGER.trace("Remove Key: "+key);
-                removeKeySet.add(key);
-            }
-        }
-        return removeKeySet;
-    }
-    
-    /**
      * Ensure that the sort order list is linked so that order can not be changed.
      * 
      * @param uncastSortOrderItems
@@ -819,17 +795,5 @@ public class HarvestAdapter implements BridgeAdapter {
             throw new BridgeError(String.format("The %s structure requires %s"
                 + "parameter.", structure, param));
         }
-    }
-
-    // This method converts non string values to strings.
-    private JSONObject convertValues(JSONObject obj, Object[] keys) {
-        for (Object key : keys) {
-            Object value = obj.get((String) key);
-            if (!(value instanceof String)) {
-                LOGGER.trace("Converting: " + String.valueOf(value) + " to a string");
-                obj.put((String)key, String.valueOf(value));
-            }
-        }
-        return obj;
     }
 }
