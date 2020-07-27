@@ -13,3 +13,7 @@ Harvest [bridge-adapter] (2020-06-09)
 Harvest [bridge-adapter] (2020-06-24)
   * \[kinetic-bridge-adapter-harvest] [v2.1.0]
     * Removed the lib dir and updated after merge.
+
+Harvest [bridge-adapter] (2020-07-24)
+  * \[kinetic-bridge-adapter-harvest] [v2.1.0]
+    * Added JsonPath.

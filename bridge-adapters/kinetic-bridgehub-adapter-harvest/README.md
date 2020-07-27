@@ -44,12 +44,14 @@ An adapter for interacting with the Harvest v2 api
 ## Configuration example
 | Structure               | Qualification Mapping      | Description |
 | :---------------------- | :------------------------- | :------------------------- |
-| Projects                | projects                   | Get a list of projects     |
+| Projects                |                   | Get a list of projects     |
 | Projects                | client_id=2372100 | Only return projects belonging to the client with the given ID|
 | Projects                | id=14308069          | Retrieve a single project  |
-| Users                   | users/{USER_ID} | Get a user |
+| Users                   | id={USER_ID} | Get a user |
+| Adhoc                   | projects/{PROJECT_ID} | Retrieve a single project using Adhoc |
 
 ## Notes
+* [JsonPath](https://github.com/json-path/JsonPath#path-examples) can be used to access nested values. The root of the path is the accessor for the Structure.
 * This adapter has been tested with the 1.0.3 bridgehub adapter.
 * The adapter only supports personal access token authentication at this time.  
     - To configure [personal access token](https://id.getharvest.com/)  
