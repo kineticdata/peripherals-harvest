@@ -31,6 +31,7 @@ An adapter for interacting with the Harvest v2 api
 | Task Assignments        | Get task assignments |
 | Projects                | Get projects |
 | Reports > Expenses      | Requires a report_type parameter.  Valid values are clients, projects, categories, and team. |
+| Adhoc                   | Requires an accessor parameter.  |
 <!-- | Reports > Uninvoiced    | Get uninvoiced reports |
 | Reports > Time          | Requires a report_type parameter.  Valid values are clients, projects, tasks, and team. |
 | Reports > Project Budget| Get project budget reports |
@@ -49,6 +50,7 @@ An adapter for interacting with the Harvest v2 api
 | Projects                | id=14308069          | Retrieve a single project  |
 | Users                   | id={USER_ID} | Get a user |
 | Adhoc                   | projects/{PROJECT_ID} | Retrieve a single project using Adhoc |
+| Adhoc                   | projects?accessor=projects&client_id=2372100 | Retrieve projects using Adhoc |
 
 ## Notes
 * [JsonPath](https://github.com/json-path/JsonPath#path-examples) can be used to access nested values. The root of the path is the accessor for the Structure.
