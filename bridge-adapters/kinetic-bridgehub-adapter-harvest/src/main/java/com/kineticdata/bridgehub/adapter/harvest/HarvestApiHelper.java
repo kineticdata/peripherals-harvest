@@ -99,9 +99,16 @@ public class HarvestApiHelper {
         JSONObject responseObj = new JSONObject();
         try {
             responseObj = (JSONObject)JSONValue.parseWithException(output);
+            // A message in the response means that the request failded with a 400
+            if(responseObj.containsKey("message")) {
+                throw new BridgeError(String.format("The server responded with: "
+                    + "\"%s\"", responseObj.get("message")));
+            }
         } catch (ParseException e){
             // Assume all 200 responses will be JSON format.
             LOGGER.error("There was a parse exception with the response", e);
+        } catch (BridgeError e) {
+            throw e;
         } catch (Exception e) {
             throw new BridgeError("An unexpected error has occured ", e);
         }

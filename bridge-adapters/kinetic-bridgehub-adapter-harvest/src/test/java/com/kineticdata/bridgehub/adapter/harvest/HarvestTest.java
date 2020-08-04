@@ -266,6 +266,35 @@ public class HarvestTest extends BridgeAdapterTestBase {
     }
     
     @Test
+    public void test_search_reports_error() throws Exception {
+        BridgeError error = null;
+
+        assertNull(error);
+
+        // Create the Bridge Request
+        List<String> fields = new ArrayList<String>();
+        fields.add("client_id");
+        fields.add("client_name");
+
+        BridgeRequest request = new BridgeRequest();
+        request.setStructure("Reports > Expenses");
+        request.setFields(fields);
+        request.setQuery("report_type=<%=parameter[\"Report Type\"]%>");
+
+        Map parameters = new HashMap();
+        parameters.put("Report Type", "clients");
+        request.setParameters(parameters);
+
+        try {
+            getAdapter().search(request);
+        } catch (BridgeError e) {
+            error = e;
+        }
+
+        assertNotNull(error);
+    }
+    
+    @Test
     public void test_search_empty_fields() throws Exception{
         BridgeError error = null;
 
