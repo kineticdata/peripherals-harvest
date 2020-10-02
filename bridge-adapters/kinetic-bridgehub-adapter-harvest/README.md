@@ -32,15 +32,6 @@ An adapter for interacting with the Harvest v2 api
 | Projects                | Get projects |
 | Reports > Expenses      | Requires a report_type parameter.  Valid values are clients, projects, categories, and team. |
 | Adhoc                   | Requires an accessor parameter.  |
-<!-- | Reports > Uninvoiced    | Get uninvoiced reports |
-| Reports > Time          | Requires a report_type parameter.  Valid values are clients, projects, tasks, and team. |
-| Reports > Project Budget| Get project budget reports |
-| Roles                   | Get roles in the account |
-| Billable Rates          | Get billable rates for the user identified by USER_ID |
-| Cost Rates              | Get cost rates for the user identified by USER_ID |
-| Project Assignments     | Get active project assignments for the user identified by USER_ID | -->
-<!-- | Expenses                | Get expenses |
-| Expense Categories      | Get expense categories | -->
 
 ## Configuration example
 | Structure               | Qualification Mapping      | Description |
