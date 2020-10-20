@@ -3,34 +3,37 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.kineticdata.bridges.adapter</groupId>
     <artifactId>kinetic-bridgehub-adapter-harvest</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>2.1.0</version>
     <packaging>jar</packaging>
-    
-    <name>kinetic-bridgehub-adapter-harvest</name>
-    <scm>
-        <connection>scm:git:https://github.com/kineticcommunity/kinetic-bridgehub-adapter-harvest.git</connection>
-        <developerConnection>scm:git:https://github.com/kineticcommunity/kinetic-bridgehub-adapter-harvest.git</developerConnection>
-    </scm>
     
     <distributionManagement>
         <repository>
-            <id>com.kineticdata</id>
-            <url>http://utilities.kineticdata.com/nexus/content/repositories/releases/</url>
+            <id>com.kineticdata.public</id>
+            <url>s3://maven-repo-public-kineticdata.com/releases</url>
         </repository>
         <snapshotRepository>
-          <id>com.kineticdata.snapshots</id>
-          <url>http://utilities.kineticdata.com/nexus/content/repositories/snapshots</url>
+            <id>com.kineticdata.public</id>
+            <url>s3://maven-repo-public-kineticdata.com/snapshots</url>
         </snapshotRepository>
     </distributionManagement>
-
+    
     <repositories>
         <repository>
-          <id>com.kineticdata</id>
-          <url>http://utilities.kineticdata.com/nexus/content/repositories/releases/</url>
+            <id>z1_com.kineticdata.public</id>
+            <url>https://s3.amazonaws.com/maven-repo-public-kineticdata.com/releases</url>
+        </repository>
+        <repository>
+            <id>z2_com.kineticdata.public</id>
+            <url>https://s3.amazonaws.com/maven-repo-public-kineticdata.com/snapshots</url>
         </repository>
     </repositories>
     
     <dependencies>
+        <dependency>
+            <groupId>com.kineticdata.agent</groupId>
+            <artifactId>kinetic-agent-adapter</artifactId>
+            <version>1.0.0</version>
+        </dependency>
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpclient</artifactId>
@@ -47,11 +50,6 @@
             <version>1.1.1</version>
         </dependency>
         <dependency>
-            <groupId>com.kineticdata.bridges.adapter</groupId>
-            <artifactId>kinetic-bridgehub-adapter</artifactId>
-            <version>1.1.0</version>
-        </dependency>
-        <dependency>
             <groupId>org.yaml</groupId>
             <artifactId>snakeyaml</artifactId>
             <version>1.16</version>
@@ -61,14 +59,45 @@
             <artifactId>commons-lang</artifactId>
             <version>2.6</version>
         </dependency>
+        <dependency>
+            <groupId>com.jayway.jsonpath</groupId>
+            <artifactId>json-path</artifactId>
+            <version>2.4.0</version>
+            <type>jar</type>
+        </dependency>
+                <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>2.9.6</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <version>2.9.6</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>2.9.6</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>1.6</maven.compiler.source>
-        <maven.compiler.target>1.6</maven.compiler.target>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
         <maven.build.timestamp.format>yyyy-MM-dd HH:mm</maven.build.timestamp.format>
     </properties>
     <build>
+        <extensions>
+            <extension>
+                <groupId>org.springframework.build</groupId>
+                <artifactId>aws-maven</artifactId>
+                <version>5.0.0.RELEASE</version>
+            </extension>
+        </extensions>
         <plugins>
             <!-- Testing -->
             <plugin>
@@ -97,6 +126,23 @@
                             <Build-Time>${maven.build.timestamp}</Build-Time>
                         </manifestEntries>
                     </archive>
+                </configuration>
+            </plugin>
+            <!-- Testing -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>2.11</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.apache.maven.surefire</groupId>
+                        <artifactId>surefire-junit47</artifactId>
+                        <version>2.12</version>
+                    </dependency>
+                </dependencies>
+                <configuration>
+                    <!-- Allow the project to be built even if tests are failing. -->
+                    <testFailureIgnore>true</testFailureIgnore>
                 </configuration>
             </plugin>
         </plugins>

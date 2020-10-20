@@ -1,5 +1,8 @@
 package com.kineticdata.bridgehub.adapter.harvest;
 
+import com.jayway.jsonpath.DocumentContext;
+import com.jayway.jsonpath.JsonPath;
+import com.jayway.jsonpath.JsonPathException;
 import com.kineticdata.bridgehub.adapter.BridgeAdapter;
 import com.kineticdata.bridgehub.adapter.BridgeError;
 import com.kineticdata.bridgehub.adapter.BridgeRequest;
@@ -9,28 +12,83 @@ import com.kineticdata.bridgehub.adapter.RecordList;
 import com.kineticdata.commons.v1.config.ConfigurableProperty;
 import com.kineticdata.commons.v1.config.ConfigurablePropertyMap;
 import java.io.IOException;
-import java.net.URLEncoder;
-import org.apache.commons.codec.binary.Base64;
-import org.apache.http.HttpEntity;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.apache.http.HttpResponse;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.util.EntityUtils;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.utils.URLEncodedUtils;
+import org.apache.http.message.BasicNameValuePair;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.JSONValue;
-import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class HarvestAdapter implements BridgeAdapter {
+    /*----------------------------------------------------------------------------------------------
+     * CONSTRUCTOR
+     *--------------------------------------------------------------------------------------------*/
+    public HarvestAdapter () {
+        // Parse the query and exchange out any parameters with their parameter 
+        // values. ie. change the query username=<%=parameter["Username"]%> to
+        // username=test.user where parameter["Username"]=test.user 
+        parser = new HarvestQualificationParser();
+        
+    }
+    
+    /*----------------------------------------------------------------------------------------------
+     * STRUCTURES
+     *      AdapterMapping( Structure Name, accessor, Path Function)
+     *--------------------------------------------------------------------------------------------*/
+    public static Map<String,AdapterMapping> MAPPINGS 
+        = new HashMap<String,AdapterMapping>() {{
+        put("Contacts", new AdapterMapping("Contacts", "contacts",
+            HarvestAdapter::pathContacts));
+        put("Clients", new AdapterMapping("Clients", "clients",
+            HarvestAdapter::pathClients));
+        put("Invoices", new AdapterMapping("Invoices", "invoices",
+            HarvestAdapter::pathInvoices));
+        put("Invoice Item Categories", new AdapterMapping("Invoice Item Categories",
+            "invoice_item_categories", HarvestAdapter::pathInvoiceItemCategories));
+        put("Estimates", new AdapterMapping("Estimates", "estimates",
+            HarvestAdapter::pathEstimates));
+        put("Estimate Item Categories", new AdapterMapping("Estimate Item Categories",
+            "estimate_item_categories", HarvestAdapter::pathEstimateItemCategories));
+//        put("Expenses", new AdapterMapping("Expenses",
+//            HarvestAdapter::pathExpenses));
+//        put("Expense Categories", new AdapterMapping("Expense Categories",
+//            HarvestAdapter::pathExpenseCategories));
+        put("Tasks", new AdapterMapping("Tasks", "tasks",
+            HarvestAdapter::pathTasks));
+        put("Time Entries", new AdapterMapping("Time Entries", "time_entries",
+            HarvestAdapter::pathTimeEntries));
+        put("User Assignments", new AdapterMapping("User Assignments",
+            "user_assignments", HarvestAdapter::pathUserAssignments));
+        put("Task Assignments", new AdapterMapping("Task Assignments",
+            "task_assignments", HarvestAdapter::pathTaskAssignments));
+        put("Projects", new AdapterMapping("Projects", "projects",
+            HarvestAdapter::pathProjects));
+//        put("Roles", new AdapterMapping("Roles",
+//            HarvestAdapter::pathRoles));
+//        put("Billable Rates", new AdapterMapping("Billable Rates",
+//            HarvestAdapter::pathBillableRates));
+//        put("Cost Rates", new AdapterMapping("Cost Rates",
+//            HarvestAdapter::pathCostRates));
+//        put("Project Assignments", new AdapterMapping("Project Assignments",
+//            HarvestAdapter::pathProjectAssignments));
+        put("Users", new AdapterMapping("Users", "users",
+            HarvestAdapter::pathUsers));
+        put("Reports", new AdapterMapping("Reports", "results",
+            HarvestAdapter::pathReports));
+        put("Adhoc", new AdapterMapping("Adhoc", "",
+            HarvestAdapter::pathAdhoc));
+    }};
+
     /*----------------------------------------------------------------------------------------------
      * PROPERTIES
      *--------------------------------------------------------------------------------------------*/
@@ -38,29 +96,38 @@ public class HarvestAdapter implements BridgeAdapter {
     /** Defines the adapter display name */
     public static final String NAME = "Harvest Bridge";
 
-    /** Defines the logger */
-    protected static final Logger logger = LoggerFactory.getLogger(HarvestAdapter.class);
+    /** Defines the LOGGER */
+    protected static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger(HarvestAdapter.class);
+
+    /** Adapter version constant. */
+    public static String VERSION;
+    /** Load the properties version from the version.properties file. */
+    static {
+        try {
+            java.util.Properties properties = new java.util.Properties();
+            properties
+                    .load(HarvestAdapter.class.getResourceAsStream("/" + HarvestAdapter.class.getName() + ".version"));
+            VERSION = properties.getProperty("version");
+        } catch (IOException e) {
+            LOGGER.warn("Unable to load " + HarvestAdapter.class.getName() + " version properties.", e);
+            VERSION = "Unknown";
+        }
+    }
 
     /** Defines the collection of property names for the adapter */
     public static class Properties {
-        public static final String PROPERTY_USERNAME = "Username";
-        public static final String PROPERTY_PASSWORD = "Password";
-        public static final String PROPERTY_HARVEST_ACCOUNT = "Account Name";
-
+        public static final String PROPERTY_ACCESS_TOKEN = "Access Token";
+        public static final String PROPERTY_ACCOUNT_ID = "Account Id";
     }
-
     private final ConfigurablePropertyMap properties = new ConfigurablePropertyMap(
-        new ConfigurableProperty(Properties.PROPERTY_USERNAME).setIsRequired(true),
-        new ConfigurableProperty(Properties.PROPERTY_PASSWORD).setIsRequired(true).setIsSensitive(true),
-        new ConfigurableProperty(Properties.PROPERTY_HARVEST_ACCOUNT).setIsRequired(true)
-            .setDescription("")
-    );
+            new ConfigurableProperty(Properties.PROPERTY_ACCESS_TOKEN).setIsRequired(true),
+            new ConfigurableProperty(Properties.PROPERTY_ACCOUNT_ID));
 
     // Local variables to store the property values in
-    private String username;
-    private String password;
-    private String harvestAccount;
-    private String harvestEndpoint;
+    private final HarvestQualificationParser parser;
+    private HarvestApiHelper apiHelper;
+
+    private static final String API_PATH = "https://api.harvestapp.com/v2";
 
     /*---------------------------------------------------------------------------------------------
      * SETUP METHODS
@@ -70,11 +137,9 @@ public class HarvestAdapter implements BridgeAdapter {
     public void initialize() throws BridgeError {
         // Initializing the variables with the property values that were passed
         // when creating the bridge so that they are easier to use
-        this.username = properties.getValue(Properties.PROPERTY_USERNAME);
-        this.password = properties.getValue(Properties.PROPERTY_PASSWORD);
-
-        this.harvestEndpoint = "https://" + properties.getValue(Properties.PROPERTY_HARVEST_ACCOUNT).replaceAll("/\\z", "")
-            + ".harvestapp.com";
+        String accessToken = properties.getValue(Properties.PROPERTY_ACCESS_TOKEN);
+        String accountId = properties.getValue(Properties.PROPERTY_ACCOUNT_ID);
+        apiHelper = new HarvestApiHelper(API_PATH, accessToken, accountId);
     }
 
     @Override
@@ -84,13 +149,11 @@ public class HarvestAdapter implements BridgeAdapter {
 
     @Override
     public String getVersion() {
-        // Bridgehub uses this version instead of the Maven version when
-        // displaying it in the console
-        return "1.0.0-SNAPSHOT";
+        return VERSION;
     }
 
     @Override
-    public void setProperties(Map<String,String> parameters) {
+    public void setProperties(Map<String, String> parameters) {
         // This should always be the same unless there are special circumstances
         // for changing it
         properties.setValues(parameters);
@@ -102,15 +165,6 @@ public class HarvestAdapter implements BridgeAdapter {
         // for changing it
         return properties;
     }
-
-    // Structures that are valid to use in the bridge. Used to check against
-    // when a method is called to make sure that the Structure the user is
-    // attempting to call is valid
-    // TODO: should we add "Contacts", "Invoices", "Expenses", ,"Daily"(Time Enteries), "Projects"(Time Report), "Projects"(Expense Report)
-    public static final List<String> VALID_STRUCTURES = Arrays.asList(new String[] {
-        "Clients","Projects","Tasks","Task Assignments","Users","User Assignments"
-    });
-
     /*---------------------------------------------------------------------------------------------
      * IMPLEMENTATION METHODS
      *-------------------------------------------------------------------------------------------*/
@@ -118,28 +172,45 @@ public class HarvestAdapter implements BridgeAdapter {
     @Override
     public Count count(BridgeRequest request) throws BridgeError {
         // Log the access
-        logger.trace("Counting records");
-        logger.trace("  Structure: " + request.getStructure());
-        logger.trace("  Query: " + request.getQuery());
-
-        // Check if the inputted structure is valid
-        if (!VALID_STRUCTURES.contains(request.getStructure())) {
-            throw new BridgeError("Invalid Structure: '" + request.getStructure() + "' is not a valid structure");
+        LOGGER.trace("Counting records");
+        LOGGER.trace("  Structure: " + request.getStructure());
+        if (request.getQuery() != null) {
+            LOGGER.trace("  Query: " + request.getQuery());
         }
 
-        // Parse the query and exchange out any parameters with their parameter values
-        HarvestQualificationParser parser = new HarvestQualificationParser();
-        String query = parser.parse(request.getQuery(),request.getParameters());
-
+        // parse Structure
+        List<String> structureList = Arrays.asList(request.getStructure().trim()
+            .split("\\s*>\\s*"));
+        // get Structure model
+        AdapterMapping mapping = getMapping(structureList.get(0));
+        
+        Map<String, String> parameters = getParameters(
+            parser.parse(request.getQuery(),request.getParameters()), mapping);
+        
+        // Path builder functions may mutate the parameters Map;
+        String path = mapping.getPathbuilder().apply(structureList, parameters);
+        
+        Map<String, NameValuePair> parameterMap = buildNameValuePairMap(parameters);
+       
         // Retrieve the objects based on the structure from the source
-        String output = getResource(buildSearchUrl(request.getStructure(),query));
-        logger.trace("Count Output: "+output);
-
-        // Parse the response string into a JSONObject
-        JSONArray objects = (JSONArray)JSONValue.parse(output);
-
+        JSONObject responseObject = apiHelper.executeRequest(getUrl(path, parameterMap));
+        
         // Get the number of elements in the returned array
-        Integer count = objects.size();
+        Long tempCount = (Long)responseObject.get("total_entries");
+        Integer count = 0;
+        // Single results will not have a total_entries property
+        if (tempCount == null) {
+            Long singleResult = (Long)responseObject.get("id");
+            if (singleResult == null) {
+                throw new BridgeError("The Count result was unexpected.  Please"
+                        + "check query and rerun.");
+            } else {
+                // If object has id property assume a single result for found
+                count = 1;
+            }
+        } else {
+            count = (int) tempCount.intValue();
+        }
 
         // Create and return a count object that contains the count
         return new Count(count);
@@ -148,56 +219,56 @@ public class HarvestAdapter implements BridgeAdapter {
     @Override
     public Record retrieve(BridgeRequest request) throws BridgeError {
         // Log the access
-        logger.trace("Retrieving Kinetic Request CE Record");
-        logger.trace("  Structure: " + request.getStructure());
-        logger.trace("  Query: " + request.getQuery());
-        logger.trace("  Fields: " + request.getFieldString());
-
-        // Check if the inputted structure is valid
-        if (!VALID_STRUCTURES.contains(request.getStructure())) {
-            throw new BridgeError("Invalid Structure: '" + request.getStructure() + "' is not a valid structure");
+        LOGGER.trace("Retrieving Kinetic Request CE Record");
+        LOGGER.trace("  Structure: " + request.getStructure());
+        if (request.getQuery() != null) {
+            LOGGER.trace("  Query: " + request.getQuery());
         }
-
-        // Parse the query and exchange out any parameters with their parameter values
-        HarvestQualificationParser parser = new HarvestQualificationParser();
-        String query = parser.parse(request.getQuery(),request.getParameters());
+        if (request.getFieldString() != null) {
+            LOGGER.trace("  Fields: " + request.getFieldString());
+        }
+        
+        // parse Structure
+        List<String> structureList = Arrays.asList(request.getStructure().trim()
+            .split("\\s*>\\s*"));
+        // get Structure model
+        AdapterMapping mapping = getMapping(structureList.get(0));
+        
+        Map<String, String> parameters = getParameters(
+            parser.parse(request.getQuery(),request.getParameters()), mapping);
+        
+        // Path builder functions may mutate the parameters Map;
+        String path = mapping.getPathbuilder().apply(structureList, parameters);
+                
+        // Accessor values is either passed as a parameter in the qualification
+        // mapping for Adhoc or on the mapping for all other structures.
+        String accessor = getAccessor(mapping, parameters);
+        
+        Map<String, NameValuePair> parameterMap = buildNameValuePairMap(parameters);
 
         // Retrieve the objects based on the structure from the source
-        String output = getResource(buildRetrieveUrl(request.getStructure(),query));
-        logger.trace("Retrieve Output: "+output);
-
-        // Parse the response string into a JSONObject
-        JSONObject object = (JSONObject)JSONValue.parse(output);
-
-        List<String> fields = request.getFields();
-        if (fields == null) {
-            fields = new ArrayList();
-        }
-
-        // If no keys where provided to the search then we return all properties
-        JSONObject obj = (JSONObject)(object).get(getPropertyName(object));
-        if(fields.isEmpty()){
-            fields.addAll(obj.keySet());
-        }
-
-        // If specific fields were specified then we remove all of the nonspecified properties from the object.
-        Set<Object> removeKeySet = new HashSet<Object>();
-        for(Object key: obj.keySet()){
-            if(fields.contains(key)){
-                continue;
-            }else{
-                logger.trace("Remove Key: "+key);
-                removeKeySet.add(key);
-            }
-        }
-        obj.keySet().removeAll(removeKeySet);
-
-        // Create a Record object from the responce JSONObject
-        Record record;
-        if (obj != null) {
-            record = new Record(obj);
+        JSONObject responseObject = apiHelper.executeRequest(getUrl(path, parameterMap));
+        
+        JSONArray responseArray = new JSONArray();
+        if (responseObject.containsKey(accessor)) {
+            responseArray = getResponseData(responseObject.get(accessor));
         } else {
-            record = new Record();
+            responseArray = getResponseData(responseObject);
+        }
+        
+        Record record = new Record();
+        if (responseArray.size() == 1) {
+            // Reassign object to single result 
+            JSONObject object = (JSONObject)responseArray.get(0);
+                
+            List<String> fields = getFields(request.getFields() == null ? 
+                new ArrayList() : request.getFields(), object);
+            record = buildRecord(fields, object);
+        } else if (responseArray.isEmpty()) {
+            LOGGER.debug("No results found for query: {}", request.getQuery());
+        } else {
+            throw new BridgeError ("Retrieve must return a single result."
+                + " Multiple results found.");
         }
 
         // Return the created Record object
@@ -207,258 +278,522 @@ public class HarvestAdapter implements BridgeAdapter {
     @Override
     public RecordList search(BridgeRequest request) throws BridgeError {
         // Log the access
-        logger.trace("Searching Records");
-        logger.trace("  Structure: " + request.getStructure());
-        logger.trace("  Query: " + request.getQuery());
-        logger.trace("  Fields: " + request.getFieldString());
-
-        // Check if the inputted structure is valid
-        if (!VALID_STRUCTURES.contains(request.getStructure())) {
-            throw new BridgeError("Invalid Structure: '" + request.getStructure() + "' is not a valid structure");
+        LOGGER.trace("Searching Records");
+        LOGGER.trace("  Structure: " + request.getStructure());
+        if (request.getQuery() != null) {
+            LOGGER.trace("  Query: " + request.getQuery());
         }
-
-        // Parse the query and exchange out any parameters with their parameter values
-        HarvestQualificationParser parser = new HarvestQualificationParser();
-        String query = parser.parse(request.getQuery(),request.getParameters());
-
+        if (request.getFieldString() != null) {
+            LOGGER.trace("  Fields: " + request.getFieldString());
+        }
+        
+         // parse Structure
+        List<String> structureList = Arrays.asList(request.getStructure().trim()
+            .split("\\s*>\\s*"));
+        // get Structure model
+        AdapterMapping mapping = getMapping(structureList.get(0));
+        
+        Map<String, String> parameters = addPaginationFromMetadata(getParameters(
+            parser.parse(request.getQuery(),request.getParameters()), mapping),
+            request.getMetadata());
+        
+        // Path builder functions may mutate the parameters Map;
+        String path = mapping.getPathbuilder().apply(structureList, parameters);
+        
+        // Accessor values is either passed as a parameter in the qualification
+        // mapping for Adhoc or on the mapping for all other structures.
+        String accessor = getAccessor(mapping, parameters);
+        
+        Map<String, NameValuePair> parameterMap = buildNameValuePairMap(parameters);
+        
         // Retrieve the objects based on the structure from the source
-        String output = getResource(buildSearchUrl(request.getStructure(),query));
-        logger.trace("Search Output: "+output);
-
-        // Parse the response string into a JSONObject
-        JSONArray objects = (JSONArray)JSONValue.parse(output);
-
-        // Create a List of records that will be used to make a RecordList object
-        List<Record> recordList = new ArrayList<Record>();
-
-        // If the user doesn't enter any values for fields we return all of the fields
-        List<String> fields = request.getFields();
-        if (fields == null) {
-            fields = new ArrayList();
+        JSONObject responseObject = apiHelper.executeRequest(getUrl(path, 
+            parameterMap));
+        
+        JSONArray responseArray = new JSONArray();
+        if (responseObject.containsKey(accessor)) {
+            responseArray = getResponseData(responseObject.get(accessor));
+        } else {
+            responseArray = getResponseData(responseObject);
         }
-
-        if(objects.isEmpty() != true){
-            String propertyName = "";
-            JSONObject firstObj = (JSONObject)objects.get(0);
-
-            propertyName = getPropertyName(firstObj);
-
-            // If no keys where provided to the search then we return all properties
-            if(fields.isEmpty()){
-                JSONObject keysObj = (JSONObject)(firstObj).get(propertyName);
-                fields.addAll(keysObj.keySet());
-            }
+        
+        // Create a List of records that will be used to make a RecordList object.
+        List<Record> recordList = new ArrayList<Record>();      
+        List<String> fields = request.getFields() == null ? new ArrayList() : 
+            request.getFields();        
+        if(responseArray != null && responseArray.isEmpty() != true){
+            fields = getFields(fields, (JSONObject)responseArray.get(0));
 
             // Iterate through the responce objects and make a new Record for each.
-            for (Object o : objects) {
-                JSONObject object = (JSONObject)((JSONObject)o).get(propertyName);
-                Record record;
-                if (object != null) {
-                    record = new Record(object);
-                } else {
-                    record = new Record();
-                }
+            for (Object o : responseArray) {
+                JSONObject obj = (JSONObject)o;
+                Record record = buildRecord(fields, obj);
+                
                 // Add the created record to the list of records
                 recordList.add(record);
             }
         }
 
+        Map<String, String> metadata = new LinkedHashMap<String, String>();
+        metadata.put("next_page", String.valueOf(responseObject.get("next_page")));
+
         // Return the RecordList object
-        return new RecordList(fields, recordList);
+        return new RecordList(fields, recordList, metadata);
     }
 
-    /*----------------------------------------------------------------------------------------------
+    /*--------------------------------------------------------------------------
      * HELPER METHODS
-     *--------------------------------------------------------------------------------------------*/
-
-    // Escape query helper method that is used to escape queries that have spaces
-    // and other characters that need escaping to form a complete URL
-    private String escapeQuery(Map<String,String> queryMap) {
-        Object[] keyList =  queryMap.keySet().toArray();
-        String queryStr = "";
-        for (Object key: keyList) {
-            String keyStr = key.toString().trim().replaceAll(" ","+");
-            String value = queryMap.get(key);
-            queryStr += keyStr+"="+URLEncoder.encode(value)+"&";
+     *------------------------------------------------------------------------*/
+    protected List<String> getFields(List<String> fields, JSONObject jsonobj) {
+        // if no fields were provided then all fields will be returned. 
+        if(fields.isEmpty()){
+            fields.addAll(jsonobj.keySet());
         }
-        logger.trace("Query String: "+queryStr);
-        return queryStr;
+        
+        return fields;
     }
-
-    // Build a map of queries from the request.  Some of the queries will be used to build the url and some will get passed on to harvest.
-    private Map<String,String> getQueryMap(String query) throws BridgeError {
-        Map<String,String> queryMap = new HashMap<String,String>();
-        if (query != null && !query.isEmpty()) {
-            String[] qSplit = query.split("&");
-            for (int i=0;i<qSplit.length;i++) {
-                String qPart = qSplit[i];
-                String[] keyValuePair = qPart.split("=");
-                String key = keyValuePair[0].trim();
-                if(queryMap.containsKey(key)){
-                  throw new BridgeError("A query can only contain one "+key+" parameter.");
-                }
-                String value = keyValuePair.length > 1 ? keyValuePair[1].trim() : "";
-                logger.trace("Query Map Key: "+key+" Value: "+value);
-                queryMap.put(key,value);
-            }
-        }
-        return queryMap;
-    }
-
-    // Each Structure requires it's own specific url and some require that a query parameter be passed in.
-    private String buildSearchUrl(String structure, String query) throws BridgeError{
-        Map<String,String> queryMap = getQueryMap(query);
-        String url = this.harvestEndpoint;
-        if(structure.equals("Clients")){
-            url += "/clients";
-        }else if(structure.equals("Projects")){
-            url += "/projects";
-        }else if(structure.equals("Tasks")){
-            url += "/tasks";
-        }else if(structure.equals("Task Assignments")){
-            if(queryMap.containsKey("project_id")){
-                url += "/projects/"+queryMap.get("project_id")+"/task_assignments";
-                queryMap.remove("project_id");
-            }else{
-                throw new BridgeError("A project_id is required for the Task Assignmenets structure");
-            }
-        }else if(structure.equals("Entries")){
-            if(queryMap.containsKey("project_id") && queryMap.containsKey("user_id")){
-                throw new BridgeError("A project_id or user_id can be provieded but not both");
-            }else if(queryMap.containsKey("project_id") || queryMap.containsKey("user_id")){
-                if(queryMap.containsKey("from") && queryMap.containsKey("to")){
-                    if(queryMap.containsKey("project_id")){
-                        url += "/projects/"+queryMap.get("project_id")+"/entries";
-                        queryMap.remove("project_id");
-                    }else if( queryMap.containsKey("project_id")){
-                        url += "/people/"+queryMap.get("user_id")+"/entries";
-                        queryMap.remove("user_id");
+    
+    /**
+     * Build a Record.  If no fields are provided all fields will be returned.
+     * 
+     * @param fields
+     * @param jsonobj
+     * @return Record
+     */
+    protected Record buildRecord (List<String> fields, JSONObject jsonobj) {
+        JSONObject obj = new JSONObject();
+        DocumentContext jsonContext = JsonPath.parse(jsonobj); 
+        
+        fields.stream().forEach(field -> {
+            // either use JsonPath or just add the field value.  We're assuming
+            // all JsonPath usages will begin with $[ or $.. 
+            if (field.startsWith("$.") || field.startsWith("$[")) {
+                try {
+                    obj.put(field, jsonContext.read(field));
+                } catch (JsonPathException e) {
+                    // if field is a valid path but object is missing the property
+                    // return null for field.  This is consistent with existing 
+                    // adapter behavior.
+                    if (e.getMessage().startsWith("Missing property")) {
+                        obj.put(field, null);
+                        LOGGER.debug(String.format("%s was not found, returning"
+                            + " null value", field), e);
+                    } else {   
+                        throw new JsonPathException(String.format("There was an issue"
+                            + " reading %s", field), e);
                     }
-                }else{
-                    throw new BridgeError("A date range must be provided with the format of from=YYYYMMDD&to=YYYYMMDD");
                 }
-            }else{
-                throw new BridgeError("A project_id or user_id is required for the Entries structure");
+            } else {
+                obj.put(field, jsonobj.get(field));
             }
-        }else if(structure.equals("Users")){
-            url += "/people";
-        }else{ // This option is for the User Assignments Structure
-            if(queryMap.containsKey("project_id")){
-                url += "/projects/"+queryMap.get("project_id")+"/user_assignments";
-                queryMap.remove("project_id");
-            }else{
-                throw new BridgeError("A project_id is required for the User Assignmenets structure");
+        });
+        
+        Record record = new Record(obj, fields);
+        return record;
+    }
+    
+        
+    protected JSONArray getResponseData(Object responseData) {
+        JSONArray responseArray = new JSONArray();
+        
+        if (responseData instanceof JSONArray) {
+            responseArray = (JSONArray)responseData;
+        }
+        else if (responseData instanceof JSONObject) {
+            // It's an object
+            responseArray.add((JSONObject)responseData);
+        }
+        
+        return responseArray;
+    }
+    
+    /**
+     * Get accessor value. If structure is Adhoc remove accessor from parameters.
+     * 
+     * @param mapping
+     * @param parameters
+     * @return 
+     */
+    private String getAccessor(AdapterMapping mapping, Map<String, String> parameters) {
+        String accessor;
+        
+        if (mapping.getStructure().equals("Adhoc")) {
+            accessor = parameters.get("accessor");
+            parameters.remove("accessor");
+        } else {
+            accessor = mapping.getAccessor();
+        }
+        
+        return accessor;
+    }
+    
+    /**
+     * This helper is intended to abstract the parser get parameters from the core
+     * methods.
+     * 
+     * @param request
+     * @param mapping
+     * @return
+     * @throws BridgeError
+     */
+    protected Map<String, String> getParameters(String query, AdapterMapping mapping) throws BridgeError {
+
+        Map<String, String> parameters = new HashMap<>();
+        if (mapping.getStructure() == "Adhoc") {
+            // Adhoc qualifications are two segments. ie path?queryParameters
+            String[] segments = query.split("[?]", 2);
+
+            // getParameters only needs the queryParameters segment
+            if (segments.length > 1) {
+                parameters = parser.getParameters(segments[1]);
             }
+            // Pass the path along to the functional operator
+            parameters.put("adapterPath", segments[0]);
+        } else {
+            parameters = parser.getParameters(query);
         }
-        if(!queryMap.isEmpty()){
-            url += "?"+escapeQuery(queryMap);
-        }
-        logger.trace("Search url: "+url);
-        return url;
+
+        return parameters;
     }
 
-    // Each Structure requires it's own specific url and some require that a query parameter be passed in.
-    private String buildRetrieveUrl(String structure, String query) throws BridgeError{
-        Map<String,String> queryMap = getQueryMap(query);
-        String url = this.harvestEndpoint;
-        if(structure.equals("Clients")){
-            if(queryMap.containsKey("client_id")){
-                url += "/clients/"+queryMap.get("client_id");
-                queryMap.remove("client_id");
-            }else{
-                throw new BridgeError("A client_id is required to retrieve a client");
-            }
-        }else if(structure.equals("Projects")){
-            if(queryMap.containsKey("project_id")){
-                url += "/projects/"+queryMap.get("project_id");
-                queryMap.remove("project_id");
-            }else{
-                throw new BridgeError("A project_id is required to retrieve a project");
-            }
-        }else if(structure.equals("Tasks")){
-            url += "/tasks";
-            if(queryMap.containsKey("task_id")){
-                url += "/tasks/"+queryMap.get("task_id");
-                queryMap.remove("task_id");
-            }else{
-                throw new BridgeError("A task_id is required to retrieve a task");
-            }
-        }else if(structure.equals("Task Assignments")){
-            if(queryMap.containsKey("project_id") && queryMap.containsKey("task_assignment_id")){
-                url += "/projects/"+queryMap.get("project_id")+"/task_assignments/"+queryMap.get("task_assignment_id");
-                queryMap.remove("project_id");
-                queryMap.remove("task_assignment_id");
-            }else{
-                throw new BridgeError("A project_id and task_assignment_id are required to retrieve a task assignment");
-            }
-        }else if(structure.equals("Users")){
-            if(queryMap.containsKey("user_id")){
-                url += "/people/"+queryMap.get("user_id");
-                queryMap.remove("user_id");
-            }else{
-                throw new BridgeError("A user_id is required to retrieve a user");
-            }
-        }else if(structure.equals("Users Assignment")){
-            if(queryMap.containsKey("project_id") && queryMap.containsKey("user_assignment_id")){
-                url += "/projects/"+queryMap.get("project_id")+"/user_assignments"+queryMap.get("user_assignment_id");
-                queryMap.remove("project_id");
-                queryMap.remove("user_assignment_id");
-            }else{
-                throw new BridgeError("A project_id and user_assignment_id are required to retrieve users assignment");
-            }
-        }else{
-            throw new BridgeError("The " + structure + " structure does not have a retrieve option");
+    /**
+     * This method checks that the structure on the request matches on in the
+     * Mapping internal class. Mappings map directly to the adapters supported
+     * Structures.
+     * 
+     * @param structure
+     * @return Mapping
+     * @throws BridgeError
+     */
+    protected AdapterMapping getMapping(String structure) throws BridgeError {
+        AdapterMapping mapping = MAPPINGS.get(structure);
+        if (mapping == null) {
+            throw new BridgeError("Invalid Structure: '" + structure + "' is not a valid structure");
         }
-        logger.trace("Retrieve url: "+url);
-        return url;
+        return mapping;
     }
 
-    // Count Search and Retrieve get the resoucre the same and use the same output object.
-    private String getResource(String url) throws BridgeError {
-        // Initialize the HTTP Client,Response, and HTTP GET objects
-        HttpClient client = HttpClients.createDefault();
-        HttpResponse response;
-        HttpGet get = new HttpGet(url);
+    protected Map<String, NameValuePair> buildNameValuePairMap(Map<String, String> parameters) {
+        Map<String, NameValuePair> parameterMap = new HashMap<>();
 
-        // Append HTTP BASIC Authorization header to HttpGet call
-        String creds = this.username + ":" + this.password;
-        byte[] basicAuthBytes = Base64.encodeBase64(creds.getBytes());
-        get.setHeader("Authorization", "Basic " + new String(basicAuthBytes));
-        get.setHeader("Accept", "application/json");
+        parameters.forEach((key, value) -> {
+            parameterMap.put(key, new BasicNameValuePair(key, value));
+        });
 
-        // Make the call to the source to retrieve data and convert the response
-        // from a HttpEntity object into a Java String
-        String output = "";
-        try {
-            response = client.execute(get);
-            HttpEntity entity = response.getEntity();
-            output = EntityUtils.toString(entity);
-            int responseCode = response.getStatusLine().getStatusCode();
-            logger.trace("Request response code: " + responseCode);
-            if(responseCode == 404){
-                throw new BridgeError("404 Page not found at "+url+".");
-            }else if(responseCode == 401){
-                throw new BridgeError("401 Access on valid.");
-            }
-        }
-        catch (IOException e) {
-            logger.error(e.getMessage());
-            throw new BridgeError("Unable to make a connection to Kinetic Core.", e);
-        }
-        return output;
+        return parameterMap;
     }
 
-    // Each Structure returns an object with a different property accessor name.  This is a generic method to get that name.
-    // If the returned object has multiple properties we throw an error.
-    private String getPropertyName(JSONObject obj) throws BridgeError {
-        Object[] keyList =  obj.keySet().toArray();
-        String key = "";
-        if(keyList.length == 1){
-            key = keyList[0].toString();
-            logger.trace("Key: "+key);
-        }else{
-           throw new BridgeError("Only one key is valid from responce object.");
+    private Map<String, String> addPaginationFromMetadata(Map<String, String> parameters,
+            Map<String, String> metadata) {
+
+        if (metadata != null) {
+            if (metadata.containsKey("page")) {
+                parameters.putIfAbsent("page", metadata.get("page"));
+            }
+            if (metadata.containsKey("per_page")) {
+                parameters.putIfAbsent("per_page", metadata.get("per_page"));
+            }
         }
-        return key;
+
+        return parameters;
+    }
+    
+    protected String getUrl (String path,
+        Map<String, NameValuePair> parameters) {
+        
+        return String.format("%s?%s", path, 
+            URLEncodedUtils.format(parameters.values(), Charset.forName("UTF-8")));
+    }
+    
+    /**
+     * Ensure that the sort order list is linked so that order can not be changed.
+     * 
+     * @param uncastSortOrderItems
+     * @return
+     * @throws IllegalArgumentException 
+     */
+    private LinkedHashMap<String, String> 
+        getSortOrderItems (Map<String, String> uncastSortOrderItems)
+        throws IllegalArgumentException{
+        
+        /* results of parseOrder does not allow for a structure that 
+         * guarantees order.  Casting is required to preserver order.
+         */
+        if (!(uncastSortOrderItems instanceof LinkedHashMap)) {
+            throw new IllegalArgumentException("Sort Order Items was invalid.");
+        }
+        
+        return (LinkedHashMap)uncastSortOrderItems;
+    }
+    
+    /**************************** Path Definitions ****************************/
+    protected static String pathContacts(List<String> structureList,
+        Map<String, String> parameters) throws BridgeError {
+        
+        String path = "/contacts";
+        if (parameters.containsKey("id")) {
+            path = String.format("%s/%s", path, parameters.get("id"));
+            parameters.remove("id");
+        }
+        
+        return path;
+    }   
+    
+    protected static String pathClients(List<String> structureList,
+        Map<String, String> parameters) throws BridgeError {
+
+        String path = "/clients";
+        if (parameters.containsKey("id")) {
+            path = String.format("%s/%s", path, parameters.get("id"));
+            parameters.remove("id");
+        }
+        
+        return path;
+    }
+    
+    protected static String pathInvoices(List<String> structureList,
+        Map<String, String> parameters) throws BridgeError {
+
+        String path = "/clients";
+        if (parameters.containsKey("id")) {
+            path = String.format("%s/%s", path, parameters.get("id"));
+            parameters.remove("id");
+        }
+        if (structureList.contains("Payments")) {
+            path = String.format("%s/%s", path, "payments");
+        } else if (structureList.contains("Messages")) {
+            path = String.format("%s/%s", path, "messages");
+        }
+        
+        return path;
+    }          
+       
+    protected static String pathInvoiceItemCategories(List<String> structureList,
+        Map<String, String> parameters) throws BridgeError {
+
+        String path = "/invoice_item_categories";
+        if (parameters.containsKey("id")) {
+            path = String.format("%s/%s", path, parameters.get("id"));
+            parameters.remove("id");
+        }
+        
+        return path;
+    }          
+       
+    protected static String pathEstimates(List<String> structureList,
+        Map<String, String> parameters) throws BridgeError {
+
+        String path = "/estimates";
+        if (parameters.containsKey("id")) {
+            path = String.format("%s/%s", path, parameters.get("id"));
+            parameters.remove("id");
+        }
+        if (structureList.contains("Messages")) {
+            path = String.format("%s/%s", path, "messages");
+        }
+        
+        return path;
+    }
+    
+    protected static String pathEstimateItemCategories(List<String> structureList,
+        Map<String, String> parameters) throws BridgeError {
+
+        String path = "/estimate_item_categories";
+        if (parameters.containsKey("id")) {
+            path = String.format("%s/%s", path, parameters.get("id"));
+            parameters.remove("id");
+        }
+        
+        return path;
+    }
+    
+//    protected static String pathExpenses(List<String> structureList,
+//        Map<String, String> parameters) throws BridgeError {
+//
+//        return path;
+//    }          
+//    protected static String pathExpenseCategories(List<String> structureList,
+//        Map<String, String> parameters) throws BridgeError {
+//
+//        return path;
+//    }
+    
+    protected static String pathTasks(List<String> structureList,
+        Map<String, String> parameters) throws BridgeError {
+
+        String path = "/tasks";
+        if (parameters.containsKey("id")) {
+            path = String.format("%s/%s", path, parameters.get("id"));
+            parameters.remove("id");
+        }
+        
+        return path;
+    }     
+    
+    protected static String pathTimeEntries(List<String> structureList,
+        Map<String, String> parameters) throws BridgeError {
+
+        String path = "/time_entries";
+        if (parameters.containsKey("id")) {
+            path = String.format("%s/%s", path, parameters.get("id"));
+            parameters.remove("id");
+        }
+        
+        return path;
+    }
+    
+    protected static String pathUserAssignments(List<String> structureList,
+        Map<String, String> parameters) throws BridgeError {
+
+        String path = "/user_assignments";
+        
+        return path;
+    } 
+    
+    protected static String pathTaskAssignments(List<String> structureList,
+        Map<String, String> parameters) throws BridgeError {
+
+        String path = "/task_assignments";
+
+        return path;
+    }      
+            
+    protected static String pathProjects(List<String> structureList,
+        Map<String, String> parameters) throws BridgeError {
+
+        String path = "/projects";
+        if (parameters.containsKey("id")) {
+            path = String.format("%s/%s", path, parameters.get("id"));
+            parameters.remove("id");
+        }
+        if (structureList.contains("Task Assignments")) {
+            path = String.format("%s/%s", path, "task_assignments");
+            if (parameters.containsKey("task_assignment_id")) {
+                path = String.format("%s/%s", path, 
+                    parameters.get("task_assignment_id"));
+                parameters.remove("task_assignment_id");
+            }
+        }
+        if (structureList.contains("User Assignments")) {
+            path = String.format("%s/%s", path, "user_assignments");
+            if (parameters.containsKey("user_assignment_id")) {
+                path = String.format("%s/%s", path, 
+                    parameters.get("user_assignment_id"));
+                parameters.remove("user_assignment_id");
+            }
+        }
+        
+        return path;
+    }          
+    
+//    protected static String pathRoles(List<String> structureList,
+//        Map<String, String> parameters) throws BridgeError {
+//
+//        return path;
+//    }          
+//    protected static String pathBillableRates(List<String> structureList,
+//        Map<String, String> parameters) throws BridgeError {
+//
+//        return path;
+//    }          
+//    protected static String pathCostRates(List<String> structureList,
+//        Map<String, String> parameters) throws BridgeError {
+//
+//        return path;
+//    }          
+//    protected static String pathProjectAssignments(List<String> structureList,
+//        Map<String, String> parameters) throws BridgeError {
+//
+//        return path;
+//    }         
+    
+    protected static String pathUsers(List<String> structureList,
+        Map<String, String> parameters) throws BridgeError {
+        
+        String path = "/users";
+        if (parameters.containsKey("id")) {
+            path = String.format("%s/%s", path, parameters.get("id"));
+            parameters.remove("id");
+        }
+        
+        return path;
+    }
+    
+    protected static String pathReports(List<String> structureList, Map<String, String> parameters) throws BridgeError {
+        if (structureList.size() < 2) {
+            throw new BridgeError("The Reports structure requires at lease two segments");
+        }
+        
+        String path = "/reports";
+
+        switch (structureList.get(1)) {
+            case "Expenses":
+                path = path + "/expenses";
+                if (parameters.containsKey("report_type")) {
+                    path = String.format("%s/%s", path, parameters.get("report_type"));
+                    parameters.remove("report_type");
+                } else {
+                    throw new BridgeError("The Reports > Expenses structure requires"
+                        + " a parameter of report_type.  valid report types are:"
+                        + " clients, projects, categories, and team.");
+                }
+                break;
+            case "Uninvoiced":
+                path = path + "/uninvoiced";
+                break;
+            case "Time":
+                path = path + "/time";
+                if (parameters.containsKey("report_type")) {
+                   path = String.format("%s/%s", path, parameters.get("report_type"));
+                    parameters.remove("report_type");
+                } else {
+                    throw new BridgeError("The Reports > Time structure requires"
+                        + " a parameter of report_type.  valid report types are:"
+                        + " clients, projects, tasks, and team.");
+                }
+                break;
+            case "Project Budget":
+                path = path + "/project_budget";
+                break;
+            default:
+                throw new BridgeError(String.format("The Reports structure does "
+                    + "not have a %s segment.  Valid second segments are Expenses,"
+                    + " Uninvoiced, Time, Project Budget.", structureList.get(1)));        
+        }
+        
+        return path;
+    }
+    
+    /**
+     * Build path for Adhoc structure.
+     * 
+     * @param structureList
+     * @param parameters
+     * @return
+     * @throws BridgeError 
+     */
+    protected static String pathAdhoc(List<String> structureList, 
+        Map<String, String> parameters) throws BridgeError {
+        
+        return parameters.get("adapterPath");
+    }
+
+    /**
+     * Checks if a parameter exists in the parameters Map.
+     * 
+     * @param param
+     * @param parameters
+     * @param structureList
+     * @throws BridgeError 
+     */
+    protected static void checkRequiredParamForStruct(String param,
+        Map<String, String> parameters, List<String> structureList)
+        throws BridgeError{
+        
+        if (!parameters.containsKey(param)) {
+            String structure = String.join(" > ", structureList);
+            throw new BridgeError(String.format("The %s structure requires %s"
+                + "parameter.", structure, param));
+        }
     }
 }
