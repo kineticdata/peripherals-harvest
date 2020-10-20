@@ -1,3 +1,5 @@
+![Source Icon](thumbnail.png)
+
 # Harvest
 
-Harvest is a web-based time tracking tool.  It offers time tracking, invoicing, expense tracking, and time-based reporting. As an example users can send automated payment reminders from the software if clients haven't paid an invoice on time.
+Harvest is a web-based time tracking and invoicing application that makes time tracking easy, keeping you on top of project budgets without the hassle of spreadsheets.
