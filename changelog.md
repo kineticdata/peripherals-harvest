@@ -11,3 +11,7 @@ Harvest [bridge-adapter] (2020-06-09)
     * Refactored the adapter to leverage a different "adapter api". (2020-06-09)
     * Removed the lib dir and updated after merge. (2020-06-24)
     * Added JsonPath. (2020-07-24)
+
+Harvest [handlers] (2021-01-27)
+  * \[harvest_api_v1]
+    * Initial commit of handler

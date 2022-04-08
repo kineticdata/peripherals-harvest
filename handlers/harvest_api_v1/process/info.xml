@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<taskInfo version="1.0">
+  <info name="account_id" description="The Account Id assocated with the harvest instance"></info>
+  <info name="access_token" description="The Access Token for acount {create access token at https://id.getharvest.com/developers}" type="encrypted"></info>
+  <info name="api_location" description="API Location (https://api.harvestapp.com/v2)"></info>
+  <info name="enable_debug_logging" description="True or False">false</info>
+</taskInfo>
